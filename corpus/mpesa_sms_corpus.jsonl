@@ -1,0 +1,49 @@
+{"expect_parse": true, "expected": {"type": "send"}, "sms": "SND001 Confirmed. Ksh1,000.00 sent to JOHN DOE 0712345678 on 21/2/26 at 10:30 AM. New M-PESA balance is Ksh5,000.00. Transaction cost, Ksh14.00."}
+{"expect_parse": true, "expected": {"type": "send"}, "sms": "SND002 Confirmed. Ksh230.00 sent to MARY NJERI 0700000002 on 21/2/26 at 11:00 AM. New M-PESA balance is Ksh4,770.00. Transaction cost, Ksh7.00."}
+{"expect_parse": true, "expected": {"type": "send"}, "sms": "SND003 Confirmed. Ksh2,350.00 sent to BRIAN KAMAU 0700000003 on 22/2/26 at 9:20 AM. New M-PESA balance is Ksh2,420.00. Transaction cost, Ksh15.00."}
+{"expect_parse": true, "expected": {"type": "send"}, "sms": "SND004 Confirmed. Ksh85.00 sent to JANET AUMA 0700000004 on 22/2/26 at 10:05 AM. New M-PESA balance is Ksh2,335.00. Transaction cost, Ksh0.00."}
+{"expect_parse": true, "expected": {"type": "send"}, "sms": "SND005 Confirmed. Ksh10,000.00 sent to KIRUI LANGAT 0700000005 on 23/2/26 at 8:40 AM. New M-PESA balance is Ksh15,000.00. Transaction cost, Ksh108.00."}
+
+{"expect_parse": true, "expected": {"type": "receive"}, "sms": "RCV001 Confirmed. You have received Ksh2,500.00 from JANE SMITH 0798765432 on 20/2/26 at 3:15 PM. New M-PESA balance is Ksh7,500.00."}
+{"expect_parse": true, "expected": {"type": "receive"}, "sms": "RCV002 Confirmed. You have received Ksh850.00 from KIPROP KOECH 0711000002 on 21/2/26 at 6:12 PM. New M-PESA balance is Ksh8,350.00."}
+{"expect_parse": true, "expected": {"type": "receive"}, "sms": "RCV003 Confirmed. You have received Ksh12,000.00 from ACME TRADERS 0711000003 on 21/2/26 at 7:31 PM. New M-PESA balance is Ksh20,350.00."}
+{"expect_parse": true, "expected": {"type": "receive"}, "sms": "RCV004 Confirmed. You have received Ksh75.00 from TOM OTIENO 0711000004 on 22/2/26 at 8:50 PM. New M-PESA balance is Ksh20,425.00."}
+{"expect_parse": true, "expected": {"type": "receive"}, "sms": "RCV005 Confirmed. You have received Ksh1,150.00 from SARAH NYAMBURA 0711000005 on 22/2/26 at 9:05 PM. New M-PESA balance is Ksh21,575.00."}
+
+{"expect_parse": true, "expected": {"type": "paybill"}, "sms": "PAY001 Confirmed. Ksh1,200.00 paid to KENYA POWER for account 123456 on 21/2/26 at 9:00 AM. New M-PESA balance is Ksh3,800.00. Transaction cost, Ksh28.00."}
+{"expect_parse": true, "expected": {"type": "paybill"}, "sms": "PAY002 Confirmed. Ksh2,400.00 paid to NAIROBI WATER for account 337700 on 22/2/26 at 8:00 AM. New M-PESA balance is Ksh1,400.00. Transaction cost, Ksh34.00."}
+{"expect_parse": true, "expected": {"type": "paybill"}, "sms": "PAY003 Confirmed. Ksh5,000.00 paid to DSTV KENYA for account 989898 on 23/2/26 at 7:30 PM. New M-PESA balance is Ksh6,000.00. Transaction cost, Ksh54.00."}
+{"expect_parse": true, "expected": {"type": "paybill"}, "sms": "PAY004 Confirmed. Ksh720.00 paid to SAFARICOM HOME for account 888221 on 23/2/26 at 10:30 AM. New M-PESA balance is Ksh5,280.00. Transaction cost, Ksh23.00."}
+{"expect_parse": true, "expected": {"type": "paybill"}, "sms": "PAY005 Confirmed. Ksh350.00 paid to COUNTY PARKING for account KCA123A on 24/2/26 at 1:10 PM. New M-PESA balance is Ksh4,930.00. Transaction cost, Ksh11.00."}
+
+{"expect_parse": true, "expected": {"type": "till"}, "sms": "TIL001 Confirmed. Ksh450.00 paid to NAIVAS SUPERMARKET on 21/2/26 at 11:45 AM. New M-PESA balance is Ksh3,350.00. Transaction cost, Ksh9.00."}
+{"expect_parse": true, "expected": {"type": "till"}, "sms": "TIL002 Confirmed. Ksh1,150.00 paid to CARREFOUR JUNCTION on 21/2/26 at 12:10 PM. New M-PESA balance is Ksh2,200.00. Transaction cost, Ksh18.00."}
+{"expect_parse": true, "expected": {"type": "till"}, "sms": "TIL003 Confirmed. Ksh120.00 paid to JAVA HOUSE on 22/2/26 at 4:00 PM. New M-PESA balance is Ksh2,080.00. Transaction cost, Ksh4.00."}
+{"expect_parse": true, "expected": {"type": "till"}, "sms": "TIL004 Confirmed. Ksh50.00 paid to KFC KENYA on 22/2/26 at 4:10 PM. New M-PESA balance is Ksh2,030.00. Transaction cost, Ksh0.00."}
+{"expect_parse": true, "expected": {"type": "till"}, "sms": "TIL005 Confirmed. Ksh2,200.00 paid to QUICKMART KASARANI on 23/2/26 at 6:40 PM. New M-PESA balance is Ksh5,800.00. Transaction cost, Ksh29.00."}
+
+{"expect_parse": true, "expected": {"type": "airtime"}, "sms": "AIR001 Confirmed. Ksh50.00 paid to Airtime on 21/2/26 at 8:00 AM. New M-PESA balance is Ksh3,300.00."}
+{"expect_parse": true, "expected": {"type": "airtime"}, "sms": "AIR002 Confirmed. Ksh20.00 paid to Airtime on 22/2/26 at 9:10 AM. New M-PESA balance is Ksh3,280.00."}
+{"expect_parse": true, "expected": {"type": "airtime"}, "sms": "AIR003 Confirmed. Ksh30.00 paid to Airtime on 22/2/26 at 11:50 AM. New M-PESA balance is Ksh3,250.00."}
+{"expect_parse": true, "expected": {"type": "airtime"}, "sms": "AIR004 Confirmed. Ksh100.00 paid to Airtime on 23/2/26 at 12:15 PM. New M-PESA balance is Ksh3,150.00."}
+{"expect_parse": true, "expected": {"type": "airtime"}, "sms": "AIR005 Confirmed. Ksh200.00 paid to Airtime on 23/2/26 at 9:45 PM. New M-PESA balance is Ksh2,950.00."}
+
+{"expect_parse": true, "expected": {"type": "withdraw"}, "sms": "WDR001 Confirmed. Ksh500.00 withdrawn from agent on 19/2/26 at 2:00 PM. New M-PESA balance is Ksh2,800.00. Transaction cost, Ksh22.00."}
+{"expect_parse": true, "expected": {"type": "withdraw"}, "sms": "WDR002 Confirmed. Ksh1,000.00 withdrawn from agent on 20/2/26 at 4:25 PM. New M-PESA balance is Ksh1,800.00. Transaction cost, Ksh28.00."}
+{"expect_parse": true, "expected": {"type": "withdraw"}, "sms": "WDR003 Confirmed. Ksh3,500.00 withdrawn from agent on 21/2/26 at 9:10 AM. New M-PESA balance is Ksh8,300.00. Transaction cost, Ksh63.00."}
+{"expect_parse": true, "expected": {"type": "withdraw"}, "sms": "WDR004 Confirmed. Ksh2,000.00 withdrawn from agent on 21/2/26 at 9:18 AM. New M-PESA balance is Ksh6,300.00. Transaction cost, Ksh44.00."}
+{"expect_parse": true, "expected": {"type": "withdraw"}, "sms": "WDR005 Confirmed. Ksh300.00 withdrawn from agent on 21/2/26 at 9:22 AM. New M-PESA balance is Ksh6,000.00. Transaction cost, Ksh13.00."}
+
+{"expect_parse": true, "expected": {"type": "deposit"}, "sms": "DEP001 Confirmed. Ksh3,000.00 deposited on 18/2/26 at 4:00 PM. New M-PESA balance is Ksh5,800.00."}
+{"expect_parse": true, "expected": {"type": "deposit"}, "sms": "DEP002 Confirmed. Ksh2,250.00 deposited on 19/2/26 at 5:30 PM. New M-PESA balance is Ksh8,050.00."}
+{"expect_parse": true, "expected": {"type": "deposit"}, "sms": "DEP003 Confirmed. Ksh450.00 deposited on 20/2/26 at 9:00 AM. New M-PESA balance is Ksh8,500.00."}
+{"expect_parse": true, "expected": {"type": "deposit"}, "sms": "DEP004 Confirmed. Ksh10,000.00 deposited on 21/2/26 at 3:00 PM. New M-PESA balance is Ksh18,500.00."}
+{"expect_parse": true, "expected": {"type": "deposit"}, "sms": "DEP005 Confirmed. Ksh1,100.00 deposited on 21/2/26 at 3:20 PM. New M-PESA balance is Ksh19,600.00."}
+
+{"expect_parse": true, "expected": {}, "sms": "REV001 Confirmed. You have received Ksh500.00 from a reversal of Ksh500.00 on 17/2/26 at 1:00 PM. New M-PESA balance is Ksh6,300.00."}
+{"expect_parse": true, "expected": {}, "sms": "REV002 Confirmed. You have received Ksh250.00 from a reversal of Ksh250.00 on 18/2/26 at 8:20 AM. New M-PESA balance is Ksh6,550.00."}
+
+{"expect_parse": false, "expected": {}, "sms": "Hello, this is not an MPESA transaction."}
+{"expect_parse": false, "expected": {}, "sms": "Your OTP is 991122 and expires in 5 minutes."}
+{"expect_parse": false, "expected": {}, "sms": "Safaricom: Welcome to Bonga points."}
+{"expect_parse": false, "expected": {}, "sms": "Reminder: Meeting moved to 3PM tomorrow."}

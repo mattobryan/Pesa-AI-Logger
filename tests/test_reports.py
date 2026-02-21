@@ -46,6 +46,7 @@ class TestWeeklySummary:
             assert "total_out" in stats
             assert "net" in stats
             assert "transaction_count" in stats
+            assert stats["render_tz"] == "Africa/Nairobi"
 
 
 class TestMonthlySummary:
@@ -71,6 +72,7 @@ class TestExportCsv:
     def test_has_header(self, db):
         content = export_csv(db_path=db)
         assert "transaction_id" in content
+        assert "running_balance" in content
 
     def test_writes_file(self, db, tmp_path):
         output = str(tmp_path / "out.csv")

@@ -6,6 +6,9 @@ from datetime import datetime
 from typing import Optional
 
 
+PARSER_VERSION = "v1.0.0"
+
+
 @dataclass
 class Transaction:
     """Represents a parsed M-Pesa transaction."""
@@ -23,6 +26,8 @@ class Transaction:
     raw_sms: str = ""
     category: Optional[str] = None
     tags: list = field(default_factory=list)
+    parser_version: str = PARSER_VERSION
+    parse_confidence: float = 0.98
 
     def to_dict(self) -> dict:
         """Convert transaction to a dictionary."""
@@ -40,6 +45,8 @@ class Transaction:
             "raw_sms": self.raw_sms,
             "category": self.category,
             "tags": self.tags,
+            "parser_version": self.parser_version,
+            "parse_confidence": self.parse_confidence,
         }
 
 
@@ -201,6 +208,8 @@ def parse_sms(sms_text: str) -> Optional[Transaction]:
             transaction_cost=cost,
             timestamp=timestamp,
             raw_sms=text,
+            parser_version=PARSER_VERSION,
+            parse_confidence=0.98,
         )
 
     return None

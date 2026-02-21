@@ -64,6 +64,8 @@ class TestIngestSms:
             content_type="application/json",
         )
         assert resp.status_code == 422
+        data = json.loads(resp.data)
+        assert data["status"] == "failed"
 
     def test_idempotent_duplicate(self, client):
         client.post(
@@ -76,7 +78,9 @@ class TestIngestSms:
             data=json.dumps({"sms": SEND_SMS}),
             content_type="application/json",
         )
-        assert resp.status_code == 201  # no error on duplicate
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "duplicate"
 
 
 class TestListTransactions:
@@ -98,3 +102,43 @@ class TestExportCsv:
         resp = client.get("/export/csv")
         assert resp.status_code == 200
         assert "text/csv" in resp.content_type
+
+
+class TestMonitoring:
+    def test_heartbeat_endpoint_returns_payload(self, client):
+        resp = client.get("/monitor/heartbeat?threshold_hours=24")
+        assert resp.status_code in (200, 503)
+        data = json.loads(resp.data)
+        assert "status" in data
+        assert "alert" in data
+
+
+class TestCorrections:
+    def test_apply_and_list_correction(self, client):
+        ingest = client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert ingest.status_code == 201
+
+        resp = client.post(
+            "/corrections",
+            data=json.dumps(
+                {
+                    "transaction_id": "BC47YUI",
+                    "updates": {"category": "Utilities"},
+                    "reason": "manual recategorization",
+                    "corrected_by": "test",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] in ("updated", "no_change")
+
+        list_resp = client.get("/corrections?transaction_id=BC47YUI")
+        assert list_resp.status_code == 200
+        rows = json.loads(list_resp.data)
+        assert isinstance(rows, list)

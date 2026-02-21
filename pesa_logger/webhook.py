@@ -16,9 +16,14 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from pesa_logger.categorizer import categorize_and_apply, tag_transaction
-from pesa_logger.database import init_db, save_transaction
-from pesa_logger.parser import parse_sms
+from pesa_logger.database import (
+    apply_transaction_correction,
+    init_db,
+    list_heartbeat_checks,
+    list_transaction_corrections,
+)
+from pesa_logger.ingestion import ingest_sms_text
+from pesa_logger.monitoring import heartbeat_status
 
 
 def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-defined]
@@ -40,6 +45,24 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
     def health():
         return jsonify({"status": "ok", "db": _db})
 
+    @app.route("/monitor/heartbeat", methods=["GET"])
+    def heartbeat():
+        threshold = float(request.args.get("threshold_hours", 24))
+        record = request.args.get("record", "1").lower() not in {"0", "false", "no"}
+        result = heartbeat_status(
+            db_path=_db,
+            threshold_hours=threshold,
+            record=record,
+        )
+        code = 200 if result["status"] == "ok" else 503
+        return jsonify(result), code
+
+    @app.route("/monitor/heartbeat/history", methods=["GET"])
+    def heartbeat_history():
+        limit = int(request.args.get("limit", 100))
+        rows = list_heartbeat_checks(db_path=_db, limit=limit)
+        return jsonify(rows)
+
     @app.route("/sms", methods=["POST"])
     def ingest_sms():
         """Accept a raw SMS and process it.
@@ -53,21 +76,20 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
         if request.is_json:
             body = request.get_json(silent=True) or {}
             sms_text = body.get("sms", "")
+            source = body.get("source") or request.headers.get("X-SMS-Source", "webhook")
         else:
             sms_text = request.get_data(as_text=True)
+            source = request.headers.get("X-SMS-Source", "webhook")
 
         if not sms_text:
             return jsonify({"error": "No SMS text provided"}), 400
 
-        tx = parse_sms(sms_text)
-        if tx is None:
-            return jsonify({"error": "Could not parse SMS as M-Pesa transaction"}), 422
-
-        categorize_and_apply(tx)
-        tag_transaction(tx)
-        save_transaction(tx, db_path=_db)
-
-        return jsonify({"status": "saved", "transaction": tx.to_dict()}), 201
+        result = ingest_sms_text(sms_text=sms_text, db_path=_db, source=source)
+        if result["status"] == "saved":
+            return jsonify(result), 201
+        if result["status"] == "duplicate":
+            return jsonify(result), 200
+        return jsonify(result), 422
 
     @app.route("/transactions", methods=["GET"])
     def list_all():
@@ -133,6 +155,45 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
             mimetype="text/csv",
             headers={"Content-Disposition": "attachment; filename=transactions.csv"},
         )
+
+    @app.route("/corrections", methods=["GET"])
+    def list_corrections():
+        tx_id = request.args.get("transaction_id")
+        limit = int(request.args.get("limit", 200))
+        rows = list_transaction_corrections(
+            db_path=_db,
+            transaction_id=tx_id or None,
+            limit=limit,
+        )
+        return jsonify(rows)
+
+    @app.route("/corrections", methods=["POST"])
+    def apply_correction():
+        body = request.get_json(silent=True) or {}
+        transaction_id = body.get("transaction_id")
+        updates = body.get("updates") or {}
+        reason = body.get("reason", "")
+        corrected_by = body.get("corrected_by", "api")
+
+        if not transaction_id:
+            return jsonify({"error": "transaction_id is required"}), 400
+        if not isinstance(updates, dict) or not updates:
+            return jsonify({"error": "updates must be a non-empty object"}), 400
+        if not reason:
+            return jsonify({"error": "reason is required"}), 400
+
+        try:
+            result = apply_transaction_correction(
+                transaction_id=transaction_id,
+                updates=updates,
+                reason=reason,
+                corrected_by=corrected_by,
+                db_path=_db,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        return jsonify(result), 200
 
     return app
 

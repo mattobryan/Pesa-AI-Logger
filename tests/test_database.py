@@ -9,10 +9,14 @@ from pesa_logger.database import (
     close_connection,
     delete_transaction,
     get_transaction,
+    get_inbox_sms,
     init_db,
     list_transactions,
+    log_report_run,
+    save_inbox_sms,
     save_transaction,
     update_category,
+    update_inbox_parse_status,
 )
 from pesa_logger.parser import Transaction
 
@@ -106,3 +110,41 @@ class TestDeleteTransaction:
         save_transaction(_make_tx("DEL1"), db_path=db)
         delete_transaction("DEL1", db_path=db)
         assert get_transaction("DEL1", db_path=db) is None
+
+
+class TestInboxSms:
+    def test_saves_raw_sms(self, db):
+        row = save_inbox_sms("ABC Confirmed. Ksh10 sent.", db_path=db, source="test")
+        assert row["id"] > 0
+        assert row["parse_status"] == "pending"
+
+    def test_dedupes_identical_sms(self, db):
+        first = save_inbox_sms("ABC Confirmed. Ksh10 sent.", db_path=db, source="test")
+        second = save_inbox_sms("ABC   Confirmed.   Ksh10 sent.", db_path=db, source="test")
+        assert first["id"] == second["id"]
+        assert second["duplicate"] is True
+
+    def test_updates_parse_status(self, db):
+        row = save_inbox_sms("ABC Confirmed. Ksh10 sent.", db_path=db, source="test")
+        update_inbox_parse_status(
+            inbox_id=row["id"],
+            parse_status="failed",
+            parse_error="test failure",
+            db_path=db,
+        )
+        updated = get_inbox_sms(inbox_id=row["id"], db_path=db)
+        assert updated["parse_status"] == "failed"
+        assert updated["parse_error"] == "test failure"
+
+
+class TestReportRuns:
+    def test_logs_report_run(self, db):
+        row_id = log_report_run(
+            report_type="weekly_summary",
+            db_path=db,
+            period_start_utc="2026-02-01T00:00:00",
+            period_end_utc="2026-02-07T23:59:59",
+            tz="Africa/Nairobi",
+            output_path="exports/weekly.csv",
+        )
+        assert row_id > 0

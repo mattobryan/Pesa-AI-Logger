@@ -13,7 +13,11 @@ Android Phone (SMS Forwarder)
         ↓
 Forwarded SMS (Webhook / HTTP POST)
         ↓
-Python Logging Engine  (pesa_logger/)
+Raw Inbox Persistence (inbox_sms)
+        ↓
+Parser + Canonical Ledger (transactions)
+        ↓
+Python Intelligence Engine (pesa_logger/)
         ↓
 SQLite Database  (pesa_logger.db)
         ↓
@@ -34,6 +38,11 @@ Excel / CSV Export  +  Financial Analytics
 | CSV and Excel export | `pesa_logger/reports.py` |
 | REST webhook / API server | `pesa_logger/webhook.py` |
 | AI-generated insights | `pesa_logger/analytics.py` |
+| Raw-first ingestion orchestration | `pesa_logger/ingestion.py` |
+| Heartbeat and silence alerts | `pesa_logger/monitoring.py` |
+| Backup and scheduler automation | `pesa_logger/automation.py` |
+| Parser corpus validation | `pesa_logger/corpus.py` |
+| Audited transaction corrections | `pesa_logger/database.py` + `/corrections` |
 
 ---
 
@@ -124,6 +133,36 @@ python main.py export-excel --output transactions.xlsx
 python main.py anomalies --days 90
 ```
 
+### 9. Run heartbeat monitor
+
+```bash
+python main.py heartbeat --hours 24
+```
+
+### 10. Create DB backup
+
+```bash
+python main.py backup --backup-dir backups --keep-last 14
+```
+
+### 11. Run one scheduler cycle
+
+```bash
+python main.py scheduler-once --backup-dir backups --export-dir exports --hours 24
+```
+
+### 12. Validate parser corpus
+
+```bash
+python main.py validate-corpus --path corpus/mpesa_sms_corpus.jsonl --min-success 0.98
+```
+
+### 13. Apply audited correction
+
+```bash
+python main.py correct --transaction-id BC47YUI --set category=Utilities --reason "manual correction" --by admin
+```
+
 ---
 
 ## API Endpoints
@@ -138,6 +177,10 @@ python main.py anomalies --days 90
 | `GET` | `/analytics/summary/monthly` | Monthly summary |
 | `GET` | `/analytics/anomalies` | Detected anomalies |
 | `GET` | `/export/csv` | Download CSV export |
+| `GET` | `/monitor/heartbeat` | Heartbeat and silence status |
+| `GET` | `/monitor/heartbeat/history` | Heartbeat telemetry history |
+| `POST` | `/corrections` | Apply audited correction |
+| `GET` | `/corrections` | List correction audit history |
 
 ---
 
@@ -157,6 +200,10 @@ python main.py serve
 ```
 pesa_logger/
 ├── __init__.py       # Package metadata
+├── ingestion.py      # Raw-first ingestion workflow
+├── monitoring.py     # Heartbeat + silence alert logic
+├── automation.py     # Backup + scheduled cycle helpers
+├── corpus.py         # Corpus loader and parser validator
 ├── parser.py         # Regex-based SMS parsing engine
 ├── database.py       # SQLite storage layer
 ├── categorizer.py    # Rule-based categorization + tagging
@@ -166,13 +213,24 @@ pesa_logger/
 └── webhook.py        # Flask REST API / webhook server
 tests/
 ├── test_parser.py
+├── test_corpus.py
 ├── test_database.py
+├── test_corrections.py
 ├── test_categorizer.py
 ├── test_anomaly.py
+├── test_automation.py
+├── test_monitoring.py
 ├── test_reports.py
 └── test_webhook.py
+scripts/
+├── backup_db.py
+└── run_scheduler_once.py
+corpus/
+└── mpesa_sms_corpus.jsonl
 main.py               # CLI entry point
 requirements.txt
+docs/IMPLEMENTATION_LOG.md
+dev/README.md
 ```
 
 ---
@@ -198,7 +256,7 @@ pytest tests/ -v
 
 ## Version
 
-`v0.1-hybrid-engine`
+`v0.3.0`
 
 ## Tags
 

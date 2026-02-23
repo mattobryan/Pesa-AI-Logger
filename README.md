@@ -43,6 +43,7 @@ Excel / CSV Export  +  Financial Analytics
 | Backup and scheduler automation | `pesa_logger/automation.py` |
 | Parser corpus validation | `pesa_logger/corpus.py` |
 | Audited transaction corrections | `pesa_logger/database.py` + `/corrections` |
+| Phone-side pilot forwarder (Termux) | `phone_module/script/` |
 
 ---
 
@@ -163,6 +164,14 @@ python main.py validate-corpus --path corpus/mpesa_sms_corpus.jsonl --min-succes
 python main.py correct --transaction-id BC47YUI --set category=Utilities --reason "manual correction" --by admin
 ```
 
+### 14. Run phone pilot forwarder (Termux)
+
+See:
+
+```bash
+phone_module/script/README.md
+```
+
 ---
 
 ## API Endpoints
@@ -227,6 +236,9 @@ scripts/
 └── run_scheduler_once.py
 corpus/
 └── mpesa_sms_corpus.jsonl
+phone_module/
+├── app/
+└── script/
 main.py               # CLI entry point
 requirements.txt
 docs/IMPLEMENTATION_LOG.md

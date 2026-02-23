@@ -1,0 +1,302 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  pdftitle={MPESA Hybrid Financial Logging and Intelligence System},
+  pdfauthor={Pesa AI Logger Project}
+}
+
+\setstretch{1.2}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.75em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.6em}{}
+
+\title{MPESA Hybrid Financial Logging and Intelligence System \\
+\large Local-First Ledger Architecture, Implementation Logic, and Operational Research Notes}
+\author{Pesa AI Logger Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Executive Summary}
+The MPESA Hybrid Financial Logging and Intelligence System is a local-first data pipeline that transforms raw M-Pesa SMS notifications into a structured, auditable, and queryable financial ledger for a single user. The implementation emphasizes reliability before interface complexity. In practical terms, the system captures each SMS as immutable raw evidence, then parses and enriches it into canonical transaction records, and finally exposes analytics, anomaly detection, summaries, and exports for financial visibility.
+
+The most important design decision is \textbf{raw-first ingestion}. This ensures that even if parser logic fails for a message format change, the original SMS is preserved and can be reprocessed later. This principle directly supports auditability, data completeness, and long-term trust in the ledger.
+
+\section{Problem Context and Rationale}
+In mobile-money-dominant environments, financial activity often exists primarily in SMS form. Users and small businesses rely on transaction notifications for cash flow events, yet these messages are unstructured and difficult to analyze continuously. Existing alternatives typically require manual entry, periodic statement downloads, or cloud-first systems with privacy and connectivity tradeoffs.
+
+This project addresses those gaps by:
+\begin{itemize}[leftmargin=1.5em]
+  \item continuously capturing transaction evidence from SMS,
+  \item preserving both raw and parsed forms of the data,
+  \item enforcing idempotency and deduplication,
+  \item producing useful intelligence outputs locally.
+\end{itemize}
+
+\section{System Architecture Overview}
+\subsection{High-Level Data Flow}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Android SMS source forwards raw messages.
+  \item Webhook/API receives the payload.
+  \item Ingestion layer stores raw SMS in \texttt{inbox\_sms}.
+  \item Parser extracts canonical transaction fields.
+  \item Database writes normalized transaction rows linked to raw records.
+  \item Categorization and anomaly logic enrich metadata.
+  \item Reporting and analytics generate summaries, exports, and insights.
+\end{enumerate}
+
+\subsection{Core Architectural Principles}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Local-first}: SQLite is the source of truth.
+  \item \textbf{Raw-first}: save evidence before transformation.
+  \item \textbf{Canonical schema}: stable query and reporting behavior.
+  \item \textbf{Idempotency}: hash-based and identifier-based duplicate controls.
+  \item \textbf{Auditability}: correction history and parse status traceability.
+  \item \textbf{Modularity}: ingestion, parsing, storage, analytics, and automation are separable.
+\end{itemize}
+
+\section{Code-by-Code Module Explanation}
+This section explains the logic file by file as if teaching a beginner, while preserving engineering detail.
+
+\subsection{Entry and Control Layer}
+\subsubsection*{\texttt{main.py}}
+Think of this file as the \textbf{remote control}. It does not do all the work itself; it routes commands to the correct module.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Defines CLI commands (ingest SMS, start server, export, summary, heartbeat, backup, corpus validation, corrections).
+  \item Calls the ingestion pipeline for one-off SMS processing.
+  \item Starts API service and monitoring/automation tasks.
+  \item Produces user-facing command output.
+\end{itemize}
+
+\subsection{API and Ingestion Layer}
+\subsubsection*{\texttt{pesa\_logger/webhook.py}}
+This is the \textbf{front door}. It receives HTTP requests and maps them to internal logic.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Health endpoint for service status.
+  \item \texttt{/sms} endpoint that receives raw text and forwards it to ingestion orchestration.
+  \item Endpoints for transactions, analytics, anomalies, exports, heartbeat, and corrections.
+  \item Handles input validation and HTTP status codes.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/ingestion.py}}
+This is the \textbf{traffic officer}. It enforces the exact processing order:
+\begin{enumerate}[leftmargin=1.5em]
+  \item save raw SMS,
+  \item parse SMS,
+  \item categorize/tag,
+  \item save canonical transaction,
+  \item update parse status.
+\end{enumerate}
+
+Why this matters:
+\begin{itemize}[leftmargin=1.5em]
+  \item If parse fails, data is not lost.
+  \item If duplicates occur, they are handled safely.
+  \item Every message has a traceable processing state.
+\end{itemize}
+
+\subsection{Parsing and Enrichment Layer}
+\subsubsection*{\texttt{pesa\_logger/parser.py}}
+This file is the \textbf{translator}. It reads SMS text and tries to extract structured values.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Uses regex patterns for transaction classes (send, receive, paybill, till, airtime, withdrawal, deposit, reversal).
+  \item Parses amount, timestamp, transaction ID, counterparty, account reference, balance, and cost.
+  \item Returns a normalized Transaction object or \texttt{None} if unrecognized.
+  \item Includes parser version metadata for future migration/reprocessing.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/categorizer.py}}
+This file is the \textbf{label maker}. It assigns understandable categories and tags.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Applies keyword-based category rules.
+  \item Falls back to transaction-type defaults if no keyword matches.
+  \item Adds tags such as debit/credit, high-value, micro, and has-fee.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/anomaly.py}}
+This file is the \textbf{warning detector}. It highlights unusual patterns.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Statistical outlier checks using mean and standard deviation thresholds.
+  \item Rapid successive debit burst detection.
+  \item Unusual-hour transaction flagging.
+  \item Returns structured anomaly records for reporting or alerts.
+\end{itemize}
+
+\subsection{Storage and Audit Layer}
+\subsubsection*{\texttt{pesa\_logger/database.py}}
+This file is the \textbf{ledger vault}. It defines schema and all persistence rules.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Initializes SQLite schema for raw inbox, canonical transactions, heartbeat checks, report runs, and correction logs.
+  \item Computes normalized hash for dedupe and idempotency.
+  \item Stores raw SMS immutable records with parse status.
+  \item Stores canonical transactions linked to raw rows.
+  \item Supports audited corrections with reason, operator, old/new values.
+  \item Provides query interfaces for analytics and reports.
+\end{itemize}
+
+\subsection{Intelligence and Output Layer}
+\subsubsection*{\texttt{pesa\_logger/analytics.py}}
+This file is the \textbf{insight brain}. It creates human-readable behavior summaries.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Top spending category analysis.
+  \item Daily cashflow trend aggregation (in vs out).
+  \item Frequent counterparty detection.
+  \item Spending velocity metrics.
+  \item Net cashflow narrative.
+  \item Optional LLM narrative if \texttt{OPENAI\_API\_KEY} exists.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/reports.py}}
+This file is the \textbf{printer}. It turns ledger records into sharable outputs.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Weekly/monthly summary generation.
+  \item CSV export with running balance.
+  \item Excel export with metadata sheet.
+  \item Report run logging for traceability.
+\end{itemize}
+
+\subsection{Operations Layer}
+\subsubsection*{\texttt{pesa\_logger/monitoring.py}}
+This file is the \textbf{heartbeat monitor}. It checks whether ingestion is alive.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Computes silence duration since last SMS.
+  \item Triggers alert status when threshold exceeded.
+  \item Stores heartbeat check history for operations visibility.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/automation.py}}
+This file is the \textbf{maintenance robot}. It runs recurring operational tasks.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Consistent SQLite backup creation and retention cleanup.
+  \item Scheduled cycle combining heartbeat, backup, and weekly export behavior.
+  \item Loop-based scheduler helper for recurring execution.
+\end{itemize}
+
+\subsubsection*{\texttt{pesa\_logger/corpus.py}}
+This file is the \textbf{parser exam}. It validates parser behavior against known samples.
+
+Key roles:
+\begin{itemize}[leftmargin=1.5em]
+  \item Loads JSONL parser corpus.
+  \item Verifies expected parse success/failure.
+  \item Compares expected field values to parser output.
+  \item Returns gate result to support safe parser changes.
+\end{itemize}
+
+\subsection{Validation Layer}
+\subsubsection*{\texttt{tests/}}
+The tests are the \textbf{safety net}. They verify behavior for each subsystem so new changes do not break trusted logic.
+
+\section{Dependency Map and Execution Semantics}
+\subsection{Primary Dependency Chain}
+\begin{center}
+Input Source $\rightarrow$ Webhook/CLI $\rightarrow$ Ingestion $\rightarrow$ Database (raw) $\rightarrow$ Parser \\
+$\rightarrow$ Categorizer/Tags $\rightarrow$ Database (canonical) $\rightarrow$ Analytics/Reports/API
+\end{center}
+
+\subsection{Operational Dependencies}
+\begin{itemize}[leftmargin=1.5em]
+  \item Monitoring depends on inbox timestamps and heartbeat history.
+  \item Automation depends on monitoring and reports modules.
+  \item Corrections depend on database audit schema and API/CLI access points.
+  \item Optional AI narrative depends on environment key and OpenAI package availability.
+\end{itemize}
+
+\section{Data Integrity Strategy}
+\begin{itemize}[leftmargin=1.5em]
+  \item Raw SMS immutable storage in \texttt{inbox\_sms}.
+  \item Normalized hash dedupe for repeat forwards.
+  \item Unique constraints for canonical transaction safety.
+  \item Parse status transitions (pending/success/failed/duplicate).
+  \item Parser version metadata embedded in stored rows.
+  \item Correction audit trail preserving old and new values with reason and actor.
+\end{itemize}
+
+\section{Research Module: Script-Based Android Forwarder (Termux Approach)}
+\subsection{Research Statement}
+For private use and rapid deployment, a full native Android application is not strictly required at the prototype stage. A script-based forwarder running on the phone can be used to collect and forward M-Pesa SMS to the local ingestion endpoint.
+
+\subsection{Proposed Practical Setup}
+\begin{itemize}[leftmargin=1.5em]
+  \item Install Termux, Termux:API, and Termux:Boot.
+  \item Run a polling script that reads inbox SMS and filters M-Pesa messages.
+  \item Forward matching messages to \texttt{/sms} via HTTP POST.
+  \item Persist local \texttt{last\_seen} state to avoid repeat forwarding.
+  \item Add retry queue with exponential backoff for offline periods.
+\end{itemize}
+
+\subsection{Tradeoff Analysis}
+\textbf{Benefit}: Fast to build, easy to iterate, low initial complexity.
+
+\textbf{Constraint}: Less reliable than native background components under Android battery and process-kill policies.
+
+\textbf{Engineering implication}: For always-on and near-zero-miss operation, a minimal native app remains the stronger long-term production path.
+
+\subsection{Integration with Existing Modules}
+The Termux forwarder functions as an external source module and integrates cleanly with the current design because ingestion is source-agnostic. As long as forwarded payloads reach \texttt{webhook.py}, existing raw-first, dedupe, parse, and storage guarantees continue to apply unchanged.
+
+\section{Operational Walkthrough (Video Script Style)}
+If this project were explained in a technical video, the sequence would be:
+\begin{enumerate}[leftmargin=1.5em]
+  \item Show incoming M-Pesa SMS on phone.
+  \item Show forwarding to the local \texttt{/sms} endpoint.
+  \item Show raw row insertion into inbox table.
+  \item Show parser extraction into canonical transaction.
+  \item Show categorization and anomaly checks.
+  \item Show dashboard-style outputs: insights, summaries, CSV/Excel exports.
+  \item Show heartbeat check and backup cycle.
+  \item Show correction audit workflow and traceability.
+\end{enumerate}
+
+\section{Current Maturity Assessment}
+Based on the repository state, the project is in a strong backend phase with implemented ingestion, storage, parsing, enrichment, monitoring, automation, and test coverage. The architecture already aligns with a reliable local-first ledger strategy.
+
+\subsection{Immediate Improvements}
+\begin{itemize}[leftmargin=1.5em]
+  \item Formalize optional dependency groups for AI modules.
+  \item Strengthen webhook auth/rate-limiting controls for semi-public deployments.
+  \item Expand parser corpus and add routine reprocessing workflows.
+  \item Document backup restore drills for operational readiness.
+\end{itemize}
+
+\section{Conclusion}
+This system demonstrates that unstructured SMS streams can be transformed into a robust personal financial ledger when architecture is centered on evidence preservation, idempotency, and modular processing. By prioritizing a trusted data core first, the project creates a durable base for future UI, multi-user, or cloud-synchronization extensions without compromising correctness in the present phase.
+
+\end{document}

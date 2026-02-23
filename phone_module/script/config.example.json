@@ -1,0 +1,22 @@
+{
+  "endpoint_url": "http://192.168.1.100:5000/sms",
+  "source": "android-termux",
+  "api_key": "",
+  "required_terms": [
+    "m-pesa",
+    "confirmed",
+    "ksh"
+  ],
+  "poll_interval_seconds": 30,
+  "fetch_limit": 50,
+  "max_processed_keys": 5000,
+  "retry_base_seconds": 15,
+  "retry_max_seconds": 900,
+  "max_retries": 0,
+  "request_timeout_seconds": 15,
+  "success_status_codes": [
+    200,
+    201,
+    422
+  ]
+}

@@ -7,6 +7,8 @@ Use UTC timestamps when adding new entries.
 |---|---|---|---|
 | 2026-02-22T00:36:40Z | Codex | v1 hardening foundation | Added raw-first ingestion flow (`inbox_sms`), canonical ledger schema (`transactions`), report run tracking (`report_runs`), parser version metadata, and duplicate-safe ingestion orchestration. |
 | 2026-02-22T01:21:28Z | Codex | Operations and quality hardening | Implemented heartbeat + silence alert monitoring, scheduler/backup automation, parser corpus validation pipeline, and audited correction workflow with API/CLI coverage. |
+| 2026-02-23T19:11:49Z | Codex | Phone pilot forwarder module | Added `phone_module/` with a Termux script forwarder, durable local queue/state, retry backoff, boot/start scripts, and tests to support immediate private pilot runs. |
+| 2026-02-23T19:20:00Z | Codex | Status reporting and tree hygiene | Added `docs/PROJECT_STATUS_REPORT.md`, moved non-runtime report build utilities to `dev/tools/`, and tightened doc artifact ignore rules to keep the project tree disciplined. |
 
 ## Phase Checklist
 
@@ -14,3 +16,4 @@ Use UTC timestamps when adding new entries.
 - [x] Scheduler + backup automation
 - [x] Parser corpus validation gate
 - [x] Audited correction workflow
+- [x] Phone pilot forwarder module (Termux script)

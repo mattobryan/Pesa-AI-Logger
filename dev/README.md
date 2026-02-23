@@ -7,6 +7,7 @@ Use `dev/` for non-project or transient artifacts only.
 - Temporary experiments
 - Local-only debug scripts
 - One-off data checks
+- Utility scripts not required by runtime/production flow (for example report-build helpers)
 
 ## Do not put here
 - Production code

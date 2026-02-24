@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
     "success_status_codes": [200, 201, 422],
 }
 
+ENV_CONFIG_PATH = "MPESA_FORWARDER_CONFIG"
+ENV_STATE_PATH = "MPESA_FORWARDER_STATE"
+ENV_LOG_PATH = "MPESA_FORWARDER_LOG"
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -77,6 +81,42 @@ def load_config(config_path: Path) -> dict:
     config = dict(DEFAULT_CONFIG)
     config.update(raw)
     return config
+
+
+def resolve_runtime_paths(
+    config_arg: Optional[str],
+    state_arg: Optional[str],
+    log_arg: Optional[str],
+    base_dir: Optional[Path] = None,
+) -> Tuple[Path, Path, Path]:
+    """Resolve config/state/log paths with CLI -> env -> defaults precedence.
+
+    Defaults are anchored to:
+    - script directory when config is defaulted
+    - config directory when config path is explicitly set (CLI/env)
+    """
+    script_dir = (base_dir or Path(__file__).resolve().parent).resolve()
+    config_candidate = config_arg or os.environ.get(ENV_CONFIG_PATH)
+    if config_candidate:
+        config_path = Path(config_candidate).expanduser().resolve()
+    else:
+        config_path = (script_dir / "config.json").resolve()
+
+    default_root = config_path.parent
+
+    state_candidate = state_arg or os.environ.get(ENV_STATE_PATH)
+    if state_candidate:
+        state_path = Path(state_candidate).expanduser().resolve()
+    else:
+        state_path = (default_root / "runtime" / "state.json").resolve()
+
+    log_candidate = log_arg or os.environ.get(ENV_LOG_PATH)
+    if log_candidate:
+        log_path = Path(log_candidate).expanduser().resolve()
+    else:
+        log_path = (default_root / "runtime" / "forwarder.log").resolve()
+
+    return config_path, state_path, log_path
 
 
 def default_state() -> dict:
@@ -375,18 +415,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Termux MPESA SMS forwarder")
     parser.add_argument(
         "--config",
-        default="config.json",
-        help="Path to config file (default: config.json)",
+        default=None,
+        help=(
+            "Path to config file. "
+            "Default: ./config.json in script dir "
+            f"(env: {ENV_CONFIG_PATH})"
+        ),
     )
     parser.add_argument(
         "--state",
-        default="runtime/state.json",
-        help="Path to state file (default: runtime/state.json)",
+        default=None,
+        help=(
+            "Path to state file. "
+            "Default: ./runtime/state.json in script dir "
+            f"(env: {ENV_STATE_PATH})"
+        ),
     )
     parser.add_argument(
         "--log",
-        default="runtime/forwarder.log",
-        help="Path to log file (default: runtime/forwarder.log)",
+        default=None,
+        help=(
+            "Path to log file. "
+            "Default: ./runtime/forwarder.log in script dir "
+            f"(env: {ENV_LOG_PATH})"
+        ),
     )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="Poll/enqueue without POST delivery")
@@ -394,6 +446,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--init-config",
         action="store_true",
         help="Create config file from defaults if missing and exit",
+    )
+    parser.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print effective runtime config and paths, then exit",
     )
     return parser
 
@@ -409,9 +466,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    config_path = Path(args.config).expanduser().resolve()
-    state_path = Path(args.state).expanduser().resolve()
-    log_path = Path(args.log).expanduser().resolve()
+    config_path, state_path, log_path = resolve_runtime_paths(
+        config_arg=args.config,
+        state_arg=args.state,
+        log_arg=args.log,
+    )
     runtime = ForwarderRuntime(
         config_path=config_path,
         state_path=state_path,
@@ -434,11 +493,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
+    config = load_config(config_path)
+    runtime.log(f"using_config_path={runtime.config_path}")
+    runtime.log(f"using_endpoint_url={config.get('endpoint_url')}")
+    if not str(config.get("endpoint_url", "")).strip().endswith("/sms"):
+        runtime.log("warning endpoint_url does_not_end_with_/sms")
+
+    if args.print_config:
+        payload = dict(config)
+        payload["_config_path"] = str(runtime.config_path)
+        payload["_state_path"] = str(runtime.state_path)
+        payload["_log_path"] = str(runtime.log_path)
+        print(json.dumps(payload, ensure_ascii=True, indent=2))
+        return 0
+
     if args.once:
         run_cycle(runtime, dry_run=args.dry_run)
         return 0
 
-    config = load_config(config_path)
     interval = max(5, int(config["poll_interval_seconds"]))
     runtime.log(f"starting_forwarder poll_interval_seconds={interval}")
     while True:

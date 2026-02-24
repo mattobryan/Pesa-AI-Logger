@@ -1,5 +1,6 @@
 # Core
 flask>=2.3,<4.0
+tzdata>=2024.1
 
 # Excel export (optional but recommended)
 openpyxl>=3.1,<4.0

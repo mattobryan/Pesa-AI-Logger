@@ -7,16 +7,22 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterator, List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pesa_logger.parser import PARSER_VERSION, Transaction
 
 
 _DEFAULT_DB = "pesa_logger.db"
 _local = threading.local()
-_NAIROBI_TZ = ZoneInfo("Africa/Nairobi")
+
+try:
+    _NAIROBI_TZ = ZoneInfo("Africa/Nairobi")
+except ZoneInfoNotFoundError:
+    # Fallback for environments without tzdata installed (common on Windows).
+    _NAIROBI_TZ = timezone(timedelta(hours=3), name="Africa/Nairobi")
+
 _VALID_PARSE_STATUSES = {"pending", "success", "failed", "duplicate"}
 
 

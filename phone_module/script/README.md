@@ -30,6 +30,17 @@ This is the fastest private-use path to forward M-Pesa SMS to your local ledger.
    - Set `endpoint_url` to your backend `/sms` URL.
    - Keep required terms as `m-pesa`, `confirmed`, `ksh`.
 
+Verify effective runtime config and paths:
+
+```bash
+python mpesa_forwarder.py --print-config
+```
+
+This prints:
+- actual config path being read
+- actual state/log file paths
+- effective endpoint URL
+
 ## Run
 
 Single cycle test:

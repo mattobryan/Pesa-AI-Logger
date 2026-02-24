@@ -8,12 +8,16 @@ import statistics
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pesa_logger.database import list_transactions, log_report_run
 
 
-_REPORT_TZ = ZoneInfo("Africa/Nairobi")
+try:
+    _REPORT_TZ = ZoneInfo("Africa/Nairobi")
+except ZoneInfoNotFoundError:
+    # Fallback for environments without tzdata installed (common on Windows).
+    _REPORT_TZ = timezone(timedelta(hours=3), name="Africa/Nairobi")
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

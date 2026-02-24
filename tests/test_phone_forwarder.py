@@ -89,3 +89,51 @@ def test_process_queue_failure_schedules_retry(monkeypatch):
     item = state["queue"][0]
     assert item["retries"] == 1
     assert item["last_error"] == "http_status_503"
+
+
+def test_resolve_runtime_paths_defaults_to_script_dir(tmp_path, monkeypatch):
+    config_path, state_path, log_path = fwd.resolve_runtime_paths(
+        config_arg=None,
+        state_arg=None,
+        log_arg=None,
+        base_dir=tmp_path,
+    )
+    assert config_path == (tmp_path / "config.json").resolve()
+    assert state_path == (tmp_path / "runtime" / "state.json").resolve()
+    assert log_path == (tmp_path / "runtime" / "forwarder.log").resolve()
+
+
+def test_resolve_runtime_paths_env_override(tmp_path, monkeypatch):
+    env_cfg = tmp_path / "cfg.json"
+    env_state = tmp_path / "state.json"
+    env_log = tmp_path / "log.txt"
+    monkeypatch.setenv(fwd.ENV_CONFIG_PATH, str(env_cfg))
+    monkeypatch.setenv(fwd.ENV_STATE_PATH, str(env_state))
+    monkeypatch.setenv(fwd.ENV_LOG_PATH, str(env_log))
+
+    config_path, state_path, log_path = fwd.resolve_runtime_paths(
+        config_arg=None,
+        state_arg=None,
+        log_arg=None,
+        base_dir=tmp_path / "ignored",
+    )
+    assert config_path == env_cfg.resolve()
+    assert state_path == env_state.resolve()
+    assert log_path == env_log.resolve()
+
+
+def test_resolve_runtime_paths_config_drives_default_runtime_paths(tmp_path):
+    cfg_dir = tmp_path / "custom_cfg"
+    cfg_dir.mkdir()
+    cfg_path = cfg_dir / "myconfig.json"
+
+    config_path, state_path, log_path = fwd.resolve_runtime_paths(
+        config_arg=str(cfg_path),
+        state_arg=None,
+        log_arg=None,
+        base_dir=tmp_path / "ignored",
+    )
+
+    assert config_path == cfg_path.resolve()
+    assert state_path == (cfg_dir / "runtime" / "state.json").resolve()
+    assert log_path == (cfg_dir / "runtime" / "forwarder.log").resolve()

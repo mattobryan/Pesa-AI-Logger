@@ -1,6 +1,8 @@
 """Tests for the Termux phone forwarder core logic."""
 
+import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from phone_module.script import mpesa_forwarder as fwd
 
@@ -35,6 +37,25 @@ def test_enqueue_new_messages_filters_and_dedup():
     enqueued = fwd.enqueue_new_messages(messages, state, config)
     assert enqueued == 1
     assert len(state["queue"]) == 1
+    assert state["queue"][0]["sim_slot"] is None
+
+
+def test_enqueue_captures_sim_slot():
+    config = dict(fwd.DEFAULT_CONFIG)
+    state = fwd.default_state()
+    messages = [
+        {
+            "_id": 9,
+            "body": "A Confirmed. Ksh10 M-PESA",
+            "number": "MPESA",
+            "subscriptionId": 2,
+            "date": 1700000000000,
+        }
+    ]
+
+    enqueued = fwd.enqueue_new_messages(messages, state, config)
+    assert enqueued == 1
+    assert state["queue"][0]["sim_slot"] == "2"
 
 
 def test_process_queue_success(monkeypatch):
@@ -46,6 +67,7 @@ def test_process_queue_success(monkeypatch):
             "key": "k1",
             "sms": "A Confirmed. Ksh10 M-PESA",
             "sender": "MPESA",
+            "sim_slot": "1",
             "sms_timestamp_utc": now_iso,
             "enqueued_at_utc": now_iso,
             "retries": 0,
@@ -72,6 +94,7 @@ def test_process_queue_failure_schedules_retry(monkeypatch):
             "key": "k2",
             "sms": "B Confirmed. Ksh20 M-PESA",
             "sender": "MPESA",
+            "sim_slot": "1",
             "sms_timestamp_utc": now_iso,
             "enqueued_at_utc": now_iso,
             "retries": 0,
@@ -89,6 +112,46 @@ def test_process_queue_failure_schedules_retry(monkeypatch):
     item = state["queue"][0]
     assert item["retries"] == 1
     assert item["last_error"] == "http_status_503"
+
+
+def test_fetch_inbox_sms_backfill_pages(monkeypatch):
+    def fake_run(command, capture_output, text, check):
+        if "-o" not in command:
+            payload = [
+                {"_id": 1, "body": "A Confirmed. Ksh10 M-PESA", "date": 1700000000000},
+                {"_id": 2, "body": "B Confirmed. Ksh20 M-PESA", "date": 1700000001000},
+            ]
+        else:
+            offset = int(command[command.index("-o") + 1])
+            if offset == 2:
+                payload = [{"_id": 3, "body": "C Confirmed. Ksh30 M-PESA", "date": 1700000002000}]
+            else:
+                payload = []
+        return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr(fwd.subprocess, "run", fake_run)
+    rows = fwd.fetch_inbox_sms(fetch_limit=2, backfill=True, page_size=2, max_pages=3)
+    assert len(rows) == 3
+
+
+def test_fetch_inbox_sms_backfill_offset_fallback(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_run(command, capture_output, text, check):
+        calls["count"] += 1
+        if "-o" in command:
+            return SimpleNamespace(returncode=1, stdout="", stderr="unknown option -o")
+        payload = [
+            {"_id": 1, "body": "A Confirmed. Ksh10 M-PESA", "date": 1700000000000},
+            {"_id": 2, "body": "B Confirmed. Ksh20 M-PESA", "date": 1700000001000},
+            {"_id": 3, "body": "C Confirmed. Ksh30 M-PESA", "date": 1700000002000},
+        ]
+        return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr(fwd.subprocess, "run", fake_run)
+    rows = fwd.fetch_inbox_sms(fetch_limit=2, backfill=True, page_size=2, max_pages=3)
+    assert len(rows) == 3
+    assert calls["count"] >= 2
 
 
 def test_resolve_runtime_paths_defaults_to_script_dir(tmp_path, monkeypatch):

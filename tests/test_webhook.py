@@ -3,7 +3,7 @@
 import json
 import pytest
 
-from pesa_logger.database import close_connection, init_db
+from pesa_logger.database import close_connection, get_inbox_sms, init_db
 from pesa_logger.webhook import create_app
 
 
@@ -19,6 +19,7 @@ def client(tmp_path):
     init_db(db_path)
     app = create_app(db_path=db_path)
     app.config["TESTING"] = True
+    app.config["TEST_DB_PATH"] = db_path
     with app.test_client() as client:
         yield client
     close_connection(db_path)
@@ -82,6 +83,31 @@ class TestIngestSms:
         data = json.loads(resp.data)
         assert data["status"] == "duplicate"
 
+    def test_ingest_with_meta_stamps_source(self, client):
+        resp = client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": SEND_SMS,
+                    "source": "android-termux",
+                    "meta": {
+                        "sender": "MPESA",
+                        "sim_slot": "2",
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        payload = json.loads(resp.data)
+        inbox = get_inbox_sms(
+            inbox_id=payload["inbox_id"],
+            db_path=client.application.config["TEST_DB_PATH"],
+        )
+        assert "android-termux" in inbox["source"]
+        assert "sim:2" in inbox["source"]
+        assert "sender:MPESA" in inbox["source"]
+
 
 class TestListTransactions:
     def test_returns_list(self, client):
@@ -95,6 +121,21 @@ class TestListTransactions:
         data = json.loads(resp.data)
         assert isinstance(data, list)
         assert len(data) >= 1
+
+
+class TestInbox:
+    def test_returns_raw_inbox_rows(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        resp = client.get("/inbox?limit=10&oldest_first=1")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert isinstance(rows, list)
+        assert len(rows) >= 1
+        assert "raw_text" in rows[0]
 
 
 class TestExportCsv:
@@ -142,3 +183,29 @@ class TestCorrections:
         assert list_resp.status_code == 200
         rows = json.loads(list_resp.data)
         assert isinstance(rows, list)
+
+
+class TestLedger:
+    def test_verify_ledger(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        resp = client.get("/ledger/verify")
+        assert resp.status_code == 200
+        payload = json.loads(resp.data)
+        assert payload["valid"] is True
+        assert payload["event_count"] >= 2
+
+    def test_list_ledger_events(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        resp = client.get("/ledger/events?limit=5")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert isinstance(rows, list)
+        assert len(rows) >= 1

@@ -8,6 +8,7 @@ This module enforces the raw-first contract:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from pesa_logger.categorizer import categorize_and_apply, tag_transaction
@@ -25,6 +26,7 @@ def ingest_sms_text(
     sms_text: str,
     db_path: str = "pesa_logger.db",
     source: str = "webhook",
+    fallback_event_time_utc: Optional[str] = None,
 ) -> dict:
     """Ingest a raw SMS and return a status payload."""
     inbox = save_inbox_sms(
@@ -59,6 +61,16 @@ def ingest_sms_text(
             "error": "Could not parse SMS as M-Pesa transaction",
             "inbox_id": inbox_id,
         }
+
+    if tx.timestamp is None and fallback_event_time_utc:
+        try:
+            dt = datetime.fromisoformat(str(fallback_event_time_utc).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            tx.timestamp = dt.astimezone(timezone.utc)
+        except ValueError:
+            # Keep parser-derived value when fallback metadata is malformed.
+            pass
 
     categorize_and_apply(tx)
     tag_transaction(tx)

@@ -67,6 +67,103 @@ def sms_hash(raw_text: str) -> str:
     return hashlib.sha256(normalize_sms_text(raw_text).encode("utf-8")).hexdigest()
 
 
+def _json_canonical(data: Dict[str, Any]) -> str:
+    """Serialize *data* into a deterministic JSON representation."""
+    return json.dumps(data, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _build_ledger_hash_input(
+    chain_index: int,
+    prev_hash: str,
+    event_type: str,
+    entity_table: str,
+    entity_pk: str,
+    event_time_utc: Optional[str],
+    payload_hash: str,
+    created_at_utc: str,
+) -> str:
+    return "|".join(
+        [
+            str(chain_index),
+            prev_hash,
+            event_type,
+            entity_table,
+            entity_pk,
+            event_time_utc or "",
+            payload_hash,
+            created_at_utc,
+        ]
+    )
+
+
+def _append_ledger_event_with_cursor(
+    cur: sqlite3.Cursor,
+    event_type: str,
+    entity_table: str,
+    entity_pk: str,
+    event_time_utc: Optional[str],
+    payload: Dict[str, Any],
+    created_at_utc: Optional[str] = None,
+) -> str:
+    """Append a tamper-evident event into ledger_chain and return event hash."""
+    cur.execute(
+        """
+        SELECT chain_index, event_hash
+        FROM ledger_chain
+        ORDER BY chain_index DESC
+        LIMIT 1
+        """
+    )
+    last = cur.fetchone()
+    if last:
+        prev_hash = str(last["event_hash"])
+        chain_index = int(last["chain_index"]) + 1
+    else:
+        prev_hash = ""
+        chain_index = 1
+
+    created = created_at_utc or _utc_now_iso()
+    payload_json = _json_canonical(payload)
+    payload_hash = _sha256_text(payload_json)
+    event_hash = _sha256_text(
+        _build_ledger_hash_input(
+            chain_index=chain_index,
+            prev_hash=prev_hash,
+            event_type=event_type,
+            entity_table=entity_table,
+            entity_pk=entity_pk,
+            event_time_utc=event_time_utc,
+            payload_hash=payload_hash,
+            created_at_utc=created,
+        )
+    )
+    cur.execute(
+        """
+        INSERT INTO ledger_chain
+        (chain_index, prev_hash, event_hash, event_type, entity_table,
+         entity_pk, event_time_utc, payload_json, payload_hash, created_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            chain_index,
+            prev_hash,
+            event_hash,
+            event_type,
+            entity_table,
+            entity_pk,
+            event_time_utc,
+            payload_json,
+            payload_hash,
+            created,
+        ),
+    )
+    return event_hash
+
+
 def _event_time_to_utc_iso(value: Optional[datetime]) -> Optional[str]:
     """Convert event timestamps to UTC; naive values are assumed Africa/Nairobi."""
     if value is None:
@@ -191,6 +288,43 @@ CREATE TABLE IF NOT EXISTS transaction_corrections (
 )
 """
 
+_CREATE_LEDGER_CHAIN = """
+CREATE TABLE IF NOT EXISTS ledger_chain (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_index      INTEGER NOT NULL UNIQUE,
+    prev_hash        TEXT,
+    event_hash       TEXT NOT NULL UNIQUE,
+    event_type       TEXT NOT NULL,
+    entity_table     TEXT NOT NULL,
+    entity_pk        TEXT NOT NULL,
+    event_time_utc   TEXT,
+    payload_json     TEXT NOT NULL,
+    payload_hash     TEXT NOT NULL,
+    created_at_utc   TEXT NOT NULL
+)
+"""
+
+_CREATE_LEDGER_CHAIN_IDX = """
+CREATE INDEX IF NOT EXISTS ix_ledger_chain_created_at
+ON ledger_chain(created_at_utc)
+"""
+
+_CREATE_LEDGER_BLOCK_UPDATE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS trg_ledger_chain_block_update
+BEFORE UPDATE ON ledger_chain
+BEGIN
+    SELECT RAISE(ABORT, 'ledger_chain is append-only');
+END
+"""
+
+_CREATE_LEDGER_BLOCK_DELETE_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS trg_ledger_chain_block_delete
+BEFORE DELETE ON ledger_chain
+BEGIN
+    SELECT RAISE(ABORT, 'ledger_chain is append-only');
+END
+"""
+
 _CREATE_TXN_ID_UNIQUE_IDX = """
 CREATE UNIQUE INDEX IF NOT EXISTS ux_transactions_transaction_id_not_null
 ON transactions(transaction_id)
@@ -227,11 +361,15 @@ def init_db(db_path: str = _DEFAULT_DB) -> None:
         cur.execute(_CREATE_REPORT_RUNS)
         cur.execute(_CREATE_HEARTBEAT_CHECKS)
         cur.execute(_CREATE_TRANSACTION_CORRECTIONS)
+        cur.execute(_CREATE_LEDGER_CHAIN)
         cur.execute(_CREATE_TXN_ID_UNIQUE_IDX)
         cur.execute(_CREATE_HASH_FALLBACK_UNIQUE_IDX)
         cur.execute(_CREATE_INBOX_HASH_IDX)
         cur.execute(_CREATE_TXN_EVENT_IDX)
         cur.execute(_CREATE_CORRECTIONS_TXN_IDX)
+        cur.execute(_CREATE_LEDGER_CHAIN_IDX)
+        cur.execute(_CREATE_LEDGER_BLOCK_UPDATE_TRIGGER)
+        cur.execute(_CREATE_LEDGER_BLOCK_DELETE_TRIGGER)
 
 
 # ─── Inbox (Raw SMS) ─────────────────────────────────────────────────────────
@@ -273,6 +411,22 @@ def save_inbox_sms(
                 ),
             )
             row_id = cur.lastrowid or 0
+            if row_id:
+                _append_ledger_event_with_cursor(
+                    cur=cur,
+                    event_type="inbox_sms_saved",
+                    entity_table="inbox_sms",
+                    entity_pk=str(row_id),
+                    event_time_utc=now,
+                    payload={
+                        "inbox_id": row_id,
+                        "received_at_utc": now,
+                        "source": source,
+                        "normalized_hash": normalized_hash,
+                        "parser_version": parser_version or PARSER_VERSION,
+                    },
+                    created_at_utc=now,
+                )
         except sqlite3.IntegrityError:
             duplicate = True
 
@@ -314,6 +468,26 @@ def get_inbox_sms(
             )
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def list_inbox_sms(
+    db_path: str = _DEFAULT_DB,
+    limit: int = 500,
+    oldest_first: bool = False,
+) -> List[dict]:
+    """List raw inbox SMS rows for audit/forensics."""
+    init_db(db_path)
+    order = "ASC" if oldest_first else "DESC"
+    with _cursor(db_path) as cur:
+        cur.execute(
+            f"""
+            SELECT * FROM inbox_sms
+            ORDER BY received_at_utc {order}, id {order}
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in cur.fetchall()]
 
 
 def update_inbox_parse_status(
@@ -407,7 +581,27 @@ def save_transaction(
                 created_at_utc,
             ),
         )
-        return cur.lastrowid or 0
+        row_id = cur.lastrowid or 0
+        if row_id:
+            _append_ledger_event_with_cursor(
+                cur=cur,
+                event_type="transaction_saved",
+                entity_table="transactions",
+                entity_pk=str(row_id),
+                event_time_utc=event_time_utc,
+                payload={
+                    "transaction_id": tx_id,
+                    "raw_sms_id": raw_sms_id,
+                    "normalized_hash": normalized_hash,
+                    "type": tx.type,
+                    "amount": tx.amount,
+                    "currency": tx.currency,
+                    "event_time_utc": event_time_utc,
+                    "parser_version": parser_version or getattr(tx, "parser_version", PARSER_VERSION),
+                },
+                created_at_utc=created_at_utc,
+            )
+        return row_id
 
 
 def get_transaction(transaction_id: str, db_path: str = _DEFAULT_DB) -> Optional[dict]:
@@ -716,6 +910,27 @@ def apply_transaction_correction(
                 ),
             )
 
+        _append_ledger_event_with_cursor(
+            cur=cur,
+            event_type="transaction_corrected",
+            entity_table="transactions",
+            entity_pk=transaction_id,
+            event_time_utc=corrected_at,
+            payload={
+                "transaction_id": transaction_id,
+                "reason": reason.strip(),
+                "corrected_by": corrected_by.strip() or "operator",
+                "changes": {
+                    entry["field"]: {
+                        "old": None if entry["old"] is None else str(entry["old"]),
+                        "new": None if entry["new"] is None else str(entry["new"]),
+                    }
+                    for entry in changed.values()
+                },
+            },
+            created_at_utc=corrected_at,
+        )
+
         return {
             "status": "updated",
             "transaction_id": transaction_id,
@@ -749,6 +964,104 @@ def list_transaction_corrections(
     with _cursor(db_path) as cur:
         cur.execute(query, params)
         return [dict(row) for row in cur.fetchall()]
+
+
+def list_ledger_events(
+    db_path: str = _DEFAULT_DB,
+    limit: int = 200,
+    entity_table: Optional[str] = None,
+) -> List[dict]:
+    """Return recent append-only ledger-chain events."""
+    init_db(db_path)
+    query = "SELECT * FROM ledger_chain WHERE 1=1"
+    params: list = []
+
+    if entity_table:
+        query += " AND entity_table = ?"
+        params.append(entity_table)
+
+    query += " ORDER BY chain_index DESC LIMIT ?"
+    params.append(limit)
+
+    with _cursor(db_path) as cur:
+        cur.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+
+def verify_ledger_chain(db_path: str = _DEFAULT_DB) -> dict:
+    """Verify hash continuity and deterministic event hashes."""
+    init_db(db_path)
+    with _cursor(db_path) as cur:
+        cur.execute("SELECT * FROM ledger_chain ORDER BY chain_index ASC")
+        rows = [dict(row) for row in cur.fetchall()]
+
+    prev_hash = ""
+    expected_index = 1
+    for row in rows:
+        chain_index = int(row["chain_index"])
+        if chain_index != expected_index:
+            return {
+                "valid": False,
+                "error": "chain_index_gap",
+                "expected_chain_index": expected_index,
+                "actual_chain_index": chain_index,
+                "checked_at_utc": _utc_now_iso(),
+            }
+
+        stored_prev = row.get("prev_hash") or ""
+        if stored_prev != prev_hash:
+            return {
+                "valid": False,
+                "error": "prev_hash_mismatch",
+                "chain_index": chain_index,
+                "expected_prev_hash": prev_hash,
+                "actual_prev_hash": stored_prev,
+                "checked_at_utc": _utc_now_iso(),
+            }
+
+        expected_hash = _sha256_text(
+            _build_ledger_hash_input(
+                chain_index=chain_index,
+                prev_hash=stored_prev,
+                event_type=str(row["event_type"]),
+                entity_table=str(row["entity_table"]),
+                entity_pk=str(row["entity_pk"]),
+                event_time_utc=row.get("event_time_utc"),
+                payload_hash=str(row["payload_hash"]),
+                created_at_utc=str(row["created_at_utc"]),
+            )
+        )
+        if str(row["event_hash"]) != expected_hash:
+            return {
+                "valid": False,
+                "error": "event_hash_mismatch",
+                "chain_index": chain_index,
+                "expected_event_hash": expected_hash,
+                "actual_event_hash": row["event_hash"],
+                "checked_at_utc": _utc_now_iso(),
+            }
+
+        payload_json = str(row["payload_json"])
+        payload_hash = _sha256_text(payload_json)
+        if payload_hash != str(row["payload_hash"]):
+            return {
+                "valid": False,
+                "error": "payload_hash_mismatch",
+                "chain_index": chain_index,
+                "expected_payload_hash": payload_hash,
+                "actual_payload_hash": row["payload_hash"],
+                "checked_at_utc": _utc_now_iso(),
+            }
+
+        prev_hash = str(row["event_hash"])
+        expected_index += 1
+
+    return {
+        "valid": True,
+        "event_count": len(rows),
+        "last_event_hash": prev_hash if rows else None,
+        "checked_at_utc": _utc_now_iso(),
+    }
 
 
 def close_connection(db_path: str = _DEFAULT_DB) -> None:

@@ -20,7 +20,10 @@ from pesa_logger.database import (
     apply_transaction_correction,
     init_db,
     list_heartbeat_checks,
+    list_inbox_sms,
+    list_ledger_events,
     list_transaction_corrections,
+    verify_ledger_chain,
 )
 from pesa_logger.ingestion import ingest_sms_text
 from pesa_logger.monitoring import heartbeat_status
@@ -40,6 +43,18 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
     _db = db_path or os.environ.get("PESA_DB_PATH", "pesa_logger.db")
 
     init_db(_db)
+
+    def _compose_source(base_source: str, meta: Optional[dict]) -> str:
+        if not isinstance(meta, dict):
+            return base_source
+        parts = [base_source.strip() or "webhook"]
+        sender = str(meta.get("sender") or "").strip()
+        sim_slot = str(meta.get("sim_slot") or meta.get("subscription_id") or "").strip()
+        if sim_slot:
+            parts.append(f"sim:{sim_slot}")
+        if sender:
+            parts.append(f"sender:{sender}")
+        return "|".join(parts)
 
     @app.route("/health", methods=["GET"])
     def health():
@@ -77,19 +92,39 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
             body = request.get_json(silent=True) or {}
             sms_text = body.get("sms", "")
             source = body.get("source") or request.headers.get("X-SMS-Source", "webhook")
+            source = _compose_source(source, body.get("meta"))
+            meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
+            fallback_event_time_utc = meta.get("sms_timestamp_utc")
         else:
             sms_text = request.get_data(as_text=True)
             source = request.headers.get("X-SMS-Source", "webhook")
+            fallback_event_time_utc = None
 
         if not sms_text:
             return jsonify({"error": "No SMS text provided"}), 400
 
-        result = ingest_sms_text(sms_text=sms_text, db_path=_db, source=source)
+        result = ingest_sms_text(
+            sms_text=sms_text,
+            db_path=_db,
+            source=source,
+            fallback_event_time_utc=fallback_event_time_utc,
+        )
         if result["status"] == "saved":
             return jsonify(result), 201
         if result["status"] == "duplicate":
             return jsonify(result), 200
         return jsonify(result), 422
+
+    @app.route("/inbox", methods=["GET"])
+    def list_inbox():
+        limit = int(request.args.get("limit", 200))
+        oldest_first = request.args.get("oldest_first", "0").lower() in {"1", "true", "yes"}
+        rows = list_inbox_sms(
+            db_path=_db,
+            limit=limit,
+            oldest_first=oldest_first,
+        )
+        return jsonify(rows)
 
     @app.route("/transactions", methods=["GET"])
     def list_all():
@@ -194,6 +229,23 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
             return jsonify({"error": str(exc)}), 400
 
         return jsonify(result), 200
+
+    @app.route("/ledger/verify", methods=["GET"])
+    def verify_ledger():
+        result = verify_ledger_chain(db_path=_db)
+        code = 200 if result.get("valid") else 409
+        return jsonify(result), code
+
+    @app.route("/ledger/events", methods=["GET"])
+    def ledger_events():
+        limit = int(request.args.get("limit", 200))
+        entity_table = request.args.get("entity_table")
+        rows = list_ledger_events(
+            db_path=_db,
+            limit=limit,
+            entity_table=entity_table or None,
+        )
+        return jsonify(rows)
 
     return app
 

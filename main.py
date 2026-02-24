@@ -138,6 +138,36 @@ def _parse_args():
     list_corr_cmd.add_argument("--transaction-id", default=None, help="Optional transaction filter")
     list_corr_cmd.add_argument("--limit", type=int, default=100, help="Rows to return")
 
+    # --list-inbox
+    list_inbox_cmd = subparsers.add_parser("list-inbox", help="List raw inbox SMS rows")
+    list_inbox_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    list_inbox_cmd.add_argument("--limit", type=int, default=200, help="Rows to return")
+    list_inbox_cmd.add_argument(
+        "--oldest-first",
+        action="store_true",
+        help="Return oldest rows first",
+    )
+
+    # --verify-ledger
+    verify_ledger_cmd = subparsers.add_parser(
+        "verify-ledger",
+        help="Verify tamper-evident ledger chain integrity",
+    )
+    verify_ledger_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+
+    # --ledger-events
+    ledger_events_cmd = subparsers.add_parser(
+        "ledger-events",
+        help="List recent tamper-evident ledger chain events",
+    )
+    ledger_events_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    ledger_events_cmd.add_argument("--limit", type=int, default=200, help="Rows to return")
+    ledger_events_cmd.add_argument(
+        "--entity-table",
+        default=None,
+        help="Optional table filter (e.g. inbox_sms, transactions)",
+    )
+
     return parser.parse_args()
 
 
@@ -277,11 +307,40 @@ def main():
         )
         print(json.dumps(rows, indent=2))
 
+    elif args.command == "list-inbox":
+        from pesa_logger.database import list_inbox_sms
+
+        rows = list_inbox_sms(
+            db_path=args.db,
+            limit=args.limit,
+            oldest_first=args.oldest_first,
+        )
+        print(json.dumps(rows, indent=2))
+
+    elif args.command == "verify-ledger":
+        from pesa_logger.database import verify_ledger_chain
+
+        result = verify_ledger_chain(db_path=args.db)
+        print(json.dumps(result, indent=2))
+        if not result.get("valid"):
+            sys.exit(2)
+
+    elif args.command == "ledger-events":
+        from pesa_logger.database import list_ledger_events
+
+        rows = list_ledger_events(
+            db_path=args.db,
+            limit=args.limit,
+            entity_table=args.entity_table,
+        )
+        print(json.dumps(rows, indent=2))
+
     else:
         print(
             "Pesa AI Logger. Run with --help for usage.\n\n"
             "Commands: sms, serve, export-csv, export-excel, insights, anomalies, summary, "
-            "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections"
+            "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections, "
+            "list-inbox, verify-ledger, ledger-events"
         )
 
 

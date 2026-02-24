@@ -2,7 +2,7 @@
 
 import pytest
 
-from pesa_logger.database import close_connection, get_inbox_sms, init_db, list_transactions
+from pesa_logger.database import close_connection, get_inbox_sms, get_transaction, init_db, list_transactions
 from pesa_logger.ingestion import ingest_sms_text
 
 
@@ -45,3 +45,20 @@ def test_invalid_sms_is_stored_and_marked_failed(db):
     inbox = get_inbox_sms(inbox_id=result["inbox_id"], db_path=db)
     assert inbox["parse_status"] == "failed"
     assert "Could not parse" in (inbox["parse_error"] or "")
+
+
+def test_fallback_event_time_is_used_when_parser_timestamp_missing(db):
+    sms_without_inline_time = (
+        "TS001 Confirmed. Ksh100.00 sent to JOHN DOE 0712345678."
+        " New M-PESA balance is Ksh900.00. Transaction cost, Ksh0.00."
+    )
+    result = ingest_sms_text(
+        sms_without_inline_time,
+        db_path=db,
+        source="test",
+        fallback_event_time_utc="2026-02-20T10:15:00Z",
+    )
+    assert result["status"] == "saved"
+
+    tx = get_transaction("TS001", db_path=db)
+    assert tx["timestamp"] == "2026-02-20T10:15:00"

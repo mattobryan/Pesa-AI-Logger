@@ -5,6 +5,7 @@ This is the fastest private-use path to forward M-Pesa SMS to your local ledger.
 ## What it does
 
 - Polls SMS inbox with `termux-sms-list`
+- Supports one-time historical backfill mode (paged import)
 - Filters messages containing required terms
 - Forwards to `POST /sms`
 - Retries failed deliveries with backoff
@@ -47,6 +48,18 @@ Single cycle test:
 
 ```bash
 python mpesa_forwarder.py --once
+```
+
+One-time full historical backfill:
+
+```bash
+python mpesa_forwarder.py --once --backfill
+```
+
+Optional tuning:
+
+```bash
+python mpesa_forwarder.py --once --backfill --backfill-page-size 200 --backfill-max-pages 150
 ```
 
 Daemon mode:

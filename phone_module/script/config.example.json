@@ -9,6 +9,8 @@
   ],
   "poll_interval_seconds": 30,
   "fetch_limit": 50,
+  "backfill_page_size": 200,
+  "backfill_max_pages": 100,
   "max_processed_keys": 5000,
   "retry_base_seconds": 15,
   "retry_max_seconds": 900,

@@ -1,6 +1,6 @@
 # Project Status Report
 
-Date: 2026-02-23
+Date: 2026-02-24
 Project: MPESA Hybrid Financial Logging and Intelligence System (Local-First Ledger)
 
 ## 1. Executive Status
@@ -15,8 +15,10 @@ The project is in a pilot-ready backend state with a working end-to-end pipeline
 - parser corpus validation
 - audited correction workflow
 - private phone pilot forwarder module (Termux script path)
+- historical backfill import mode (phone forwarder)
+- tamper-evident hash-chain ledger + verification
 
-Test status is green: `101 passed`.
+Test status is green: `115 passed`.
 
 ## 2. What Is Implemented
 
@@ -68,6 +70,7 @@ Test status is green: `101 passed`.
 - Folder added: `phone_module/`
 - Script track (active): `phone_module/script/`
   - polling forwarder
+  - one-time historical backfill (`--once --backfill`)
   - local queue + retry backoff
   - persisted state/log files
   - boot/start helper scripts
@@ -90,6 +93,9 @@ Active endpoints include:
 - `/monitor/heartbeat`
 - `/monitor/heartbeat/history`
 - `/corrections` (GET/POST)
+- `/inbox`
+- `/ledger/verify`
+- `/ledger/events`
 
 ### 3.2 CLI Commands
 
@@ -101,12 +107,13 @@ Active commands include:
 - `heartbeat`, `backup`, `scheduler-once`
 - `validate-corpus`
 - `correct`, `list-corrections`
+- `list-inbox`, `verify-ledger`, `ledger-events`
 
 ## 4. Quality and Verification
 
 Current automated verification:
 
-- Full suite result: `101 passed`
+- Full suite result: `115 passed`
 - Includes dedicated tests for:
   - ingestion
   - monitoring

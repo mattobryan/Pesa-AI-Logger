@@ -32,6 +32,8 @@ DEFAULT_CONFIG = {
     "required_terms": ["m-pesa", "confirmed", "ksh"],
     "poll_interval_seconds": 30,
     "fetch_limit": 50,
+    "backfill_page_size": 200,
+    "backfill_max_pages": 100,
     "max_processed_keys": 5000,
     "retry_base_seconds": 15,
     "retry_max_seconds": 900,
@@ -150,6 +152,24 @@ def extract_sender(message: dict) -> Optional[str]:
     return None
 
 
+def extract_sim_slot(message: dict) -> Optional[str]:
+    for key in (
+        "subscription_id",
+        "subscriptionId",
+        "sub_id",
+        "sim_slot",
+        "slot",
+        "simId",
+    ):
+        value = message.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def parse_sms_timestamp_utc(message: dict) -> Optional[str]:
     for key in ("date", "received", "date_sent", "timestamp"):
         value = message.get(key)
@@ -199,30 +219,109 @@ def matches_required_terms(text: str, required_terms: List[str]) -> bool:
     return True
 
 
-def fetch_inbox_sms(fetch_limit: int) -> List[dict]:
+def _parse_sms_list_payload(stdout: str) -> List[dict]:
+    payload = json.loads(stdout)
+    if isinstance(payload, list):
+        return [p for p in payload if isinstance(p, dict)]
+    if isinstance(payload, dict) and isinstance(payload.get("messages"), list):
+        return [p for p in payload["messages"] if isinstance(p, dict)]
+    raise RuntimeError("Unexpected output from termux-sms-list; expected JSON list")
+
+
+def _run_termux_sms_list(limit: int, offset: Optional[int]) -> List[dict]:
     command = [
         "termux-sms-list",
         "-t",
         "inbox",
         "-l",
-        str(fetch_limit),
+        str(max(1, int(limit))),
     ]
+    if offset is not None and offset > 0:
+        command.extend(["-o", str(offset)])
+
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
+        if offset is not None and offset > 0:
+            lowered = stderr.lower()
+            if any(
+                marker in lowered
+                for marker in ("unknown option", "invalid option", "unrecognized", "usage:")
+            ):
+                raise RuntimeError("termux-sms-list offset_not_supported")
         raise RuntimeError(f"termux-sms-list failed: {stderr or 'unknown error'}")
 
     stdout = (result.stdout or "").strip()
     if not stdout:
         return []
+    return _parse_sms_list_payload(stdout)
 
-    payload = json.loads(stdout)
-    if isinstance(payload, list):
-        return [p for p in payload if isinstance(p, dict)]
-    if isinstance(payload, dict):
-        if isinstance(payload.get("messages"), list):
-            return [p for p in payload["messages"] if isinstance(p, dict)]
-    raise RuntimeError("Unexpected output from termux-sms-list; expected JSON list")
+
+def _dedupe_messages(messages: List[dict]) -> List[dict]:
+    seen: set = set()
+    deduped: List[dict] = []
+    for message in messages:
+        key = message_identity_key(message)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(message)
+    return deduped
+
+
+def _fetch_inbox_sms_pages(
+    fetch_limit: int,
+    backfill: bool,
+    page_size: int,
+    max_pages: int,
+) -> List[dict]:
+    if not backfill:
+        return _run_termux_sms_list(limit=fetch_limit, offset=None)
+
+    page_size = max(1, int(page_size))
+    max_pages = max(1, int(max_pages))
+    all_messages: List[dict] = []
+
+    first_page = _run_termux_sms_list(limit=page_size, offset=None)
+    all_messages.extend(first_page)
+    if len(first_page) < page_size:
+        return _dedupe_messages(all_messages)
+
+    for page in range(1, max_pages):
+        offset = page * page_size
+        try:
+            batch = _run_termux_sms_list(limit=page_size, offset=offset)
+        except RuntimeError as exc:
+            if "offset_not_supported" not in str(exc):
+                raise
+            # Fallback if this Termux API build cannot page by offset.
+            fallback_limit = page_size * max_pages
+            all_messages.extend(_run_termux_sms_list(limit=fallback_limit, offset=None))
+            return _dedupe_messages(all_messages)
+
+        if not batch:
+            break
+        all_messages.extend(batch)
+        if len(batch) < page_size:
+            break
+
+    return _dedupe_messages(all_messages)
+
+
+def fetch_inbox_sms(
+    fetch_limit: int,
+    backfill: bool = False,
+    page_size: Optional[int] = None,
+    max_pages: Optional[int] = None,
+) -> List[dict]:
+    page = int(page_size or fetch_limit)
+    pages = int(max_pages or 1)
+    return _fetch_inbox_sms_pages(
+        fetch_limit=fetch_limit,
+        backfill=backfill,
+        page_size=page,
+        max_pages=pages,
+    )
 
 
 def build_payload(item: dict, source: str) -> dict:
@@ -232,6 +331,7 @@ def build_payload(item: dict, source: str) -> dict:
         "meta": {
             "key": item["key"],
             "sender": item.get("sender"),
+            "sim_slot": item.get("sim_slot"),
             "sms_timestamp_utc": item.get("sms_timestamp_utc"),
             "enqueued_at_utc": item.get("enqueued_at_utc"),
         },
@@ -299,6 +399,7 @@ def enqueue_new_messages(messages: List[dict], state: dict, config: dict) -> int
             "key": key,
             "sms": sms_text,
             "sender": extract_sender(message),
+            "sim_slot": extract_sim_slot(message),
             "sms_timestamp_utc": parse_sms_timestamp_utc(message),
             "enqueued_at_utc": now_iso,
             "retries": 0,
@@ -384,14 +485,31 @@ class ForwarderRuntime:
         print(line, flush=True)
 
 
-def run_cycle(runtime: ForwarderRuntime, dry_run: bool = False) -> dict:
+def run_cycle(
+    runtime: ForwarderRuntime,
+    dry_run: bool = False,
+    backfill: bool = False,
+    backfill_page_size: Optional[int] = None,
+    backfill_max_pages: Optional[int] = None,
+) -> dict:
     config = load_config(runtime.config_path)
     state = load_json(runtime.state_path, default_state())
 
     try:
-        messages = fetch_inbox_sms(fetch_limit=int(config["fetch_limit"]))
+        fetch_limit = int(config["fetch_limit"])
+        page_size = int(backfill_page_size or config.get("backfill_page_size") or fetch_limit)
+        max_pages = int(backfill_max_pages or config.get("backfill_max_pages") or 1)
+        messages = fetch_inbox_sms(
+            fetch_limit=fetch_limit,
+            backfill=backfill,
+            page_size=page_size,
+            max_pages=max_pages,
+        )
         enqueued = enqueue_new_messages(messages, state, config)
-        runtime.log(f"polled={len(messages)} enqueued={enqueued} queue={len(state['queue'])}")
+        runtime.log(
+            f"polled={len(messages)} backfill={str(backfill).lower()} "
+            f"enqueued={enqueued} queue={len(state['queue'])}"
+        )
     except Exception as exc:  # noqa: BLE001
         runtime.log(f"poll_error={exc}")
 
@@ -442,6 +560,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--once", action="store_true", help="Run a single cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="Poll/enqueue without POST delivery")
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Run in historical backfill mode using SMS paging before normal polling",
+    )
+    parser.add_argument(
+        "--backfill-page-size",
+        type=int,
+        default=None,
+        help="Backfill page size override (defaults to config backfill_page_size)",
+    )
+    parser.add_argument(
+        "--backfill-max-pages",
+        type=int,
+        default=None,
+        help="Backfill max pages override (defaults to config backfill_max_pages)",
+    )
     parser.add_argument(
         "--init-config",
         action="store_true",
@@ -508,13 +643,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.once:
-        run_cycle(runtime, dry_run=args.dry_run)
+        run_cycle(
+            runtime,
+            dry_run=args.dry_run,
+            backfill=args.backfill,
+            backfill_page_size=args.backfill_page_size,
+            backfill_max_pages=args.backfill_max_pages,
+        )
         return 0
 
     interval = max(5, int(config["poll_interval_seconds"]))
     runtime.log(f"starting_forwarder poll_interval_seconds={interval}")
     while True:
-        run_cycle(runtime, dry_run=args.dry_run)
+        run_cycle(
+            runtime,
+            dry_run=args.dry_run,
+            backfill=False,
+        )
         time.sleep(interval)
 
 

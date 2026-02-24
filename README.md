@@ -43,6 +43,7 @@ Excel / CSV Export  +  Financial Analytics
 | Backup and scheduler automation | `pesa_logger/automation.py` |
 | Parser corpus validation | `pesa_logger/corpus.py` |
 | Audited transaction corrections | `pesa_logger/database.py` + `/corrections` |
+| Tamper-evident hash-chain ledger | `pesa_logger/database.py` + `/ledger/*` |
 | Phone-side pilot forwarder (Termux) | `phone_module/script/` |
 
 ---
@@ -172,6 +173,19 @@ See:
 phone_module/script/README.md
 ```
 
+### 15. List raw inbox SMS (oldest first)
+
+```bash
+python main.py list-inbox --oldest-first --limit 500
+```
+
+### 16. Verify tamper-evident ledger chain
+
+```bash
+python main.py verify-ledger
+python main.py ledger-events --limit 20
+```
+
 ---
 
 ## API Endpoints
@@ -190,6 +204,9 @@ phone_module/script/README.md
 | `GET` | `/monitor/heartbeat/history` | Heartbeat telemetry history |
 | `POST` | `/corrections` | Apply audited correction |
 | `GET` | `/corrections` | List correction audit history |
+| `GET` | `/inbox` | List raw stored SMS rows |
+| `GET` | `/ledger/verify` | Verify hash-chain integrity |
+| `GET` | `/ledger/events` | List hash-chain ledger events |
 
 ---
 

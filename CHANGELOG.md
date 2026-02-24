@@ -19,6 +19,20 @@ All notable changes to this project will be documented in this file.
   - example config, boot/start scripts, and runtime state queue
   - initial future APK placeholder (`phone_module/app/README.md`)
 - Consolidated status report: `docs/PROJECT_STATUS_REPORT.md`.
+- Tamper-evident append-only ledger chain table `ledger_chain` with hash continuity verification.
+- New API endpoints:
+  - `GET /inbox`
+  - `GET /ledger/verify`
+  - `GET /ledger/events`
+- New CLI commands:
+  - `list-inbox`
+  - `verify-ledger`
+  - `ledger-events`
+- Forwarder historical import mode with paging:
+  - `python mpesa_forwarder.py --once --backfill`
+  - optional `--backfill-page-size` and `--backfill-max-pages`
+- Forwarder SIM metadata capture in webhook source stamping (`sim:<slot>`, `sender:<origin>`).
+- Fallback event-time ingestion from forwarder metadata (`sms_timestamp_utc`) when parser timestamp is missing.
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.
@@ -28,6 +42,9 @@ All notable changes to this project will be documented in this file.
 - `main.py` now includes commands for heartbeat, backup, scheduler, corpus validation, and corrections.
 - `pesa_logger/webhook.py` now exposes monitoring and correction endpoints.
 - Non-runtime report build utilities moved to `dev/tools/` to keep production/project tree clean.
+- `pesa_logger/webhook.py` now stamps source metadata from forwarder payload meta and exposes inbox/ledger endpoints.
+- `pesa_logger/database.py` now appends signed chain events for raw saves, canonical inserts, and corrections.
+- `phone_module/script/mpesa_forwarder.py` now supports paged historical backfill and SIM slot capture.
 
 ### Roadmap Checklist
 - [x] Heartbeat + silence alert monitor
@@ -35,3 +52,5 @@ All notable changes to this project will be documented in this file.
 - [x] Larger parser corpus + validation gate
 - [x] Audited correction workflow
 - [x] Phone pilot forwarder module (Termux script)
+- [x] Historical SMS backfill mode (paged import)
+- [x] Tamper-evident ledger verification

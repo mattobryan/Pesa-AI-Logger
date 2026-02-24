@@ -11,6 +11,10 @@ SEND_SMS = (
     "BC47YUI Confirmed. Ksh1,000.00 sent to JOHN DOE 0712345678 on 21/2/26 at 10:30 AM."
     " New M-PESA balance is Ksh5,000.00. Transaction cost, Ksh14.00."
 )
+SEND_SMS_2 = (
+    "BC47YUJ Confirmed. Ksh800.00 sent to JOHN DOE 0712345678 on 21/2/26 at 10:35 AM."
+    " New M-PESA balance is Ksh4,200.00. Transaction cost, Ksh10.00."
+)
 
 
 @pytest.fixture()
@@ -25,12 +29,31 @@ def client(tmp_path):
     close_connection(db_path)
 
 
+@pytest.fixture()
+def client_with_api_key(tmp_path):
+    db_path = str(tmp_path / "webhook_test_api_key.db")
+    init_db(db_path)
+    app = create_app(db_path=db_path, api_key="secret123")
+    app.config["TESTING"] = True
+    app.config["TEST_DB_PATH"] = db_path
+    with app.test_client() as client:
+        yield client
+    close_connection(db_path)
+
+
 class TestHealth:
     def test_health_returns_ok(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["status"] == "ok"
+        assert data["api_key_required"] is False
+
+    def test_health_reports_api_key_requirement(self, client_with_api_key):
+        resp = client_with_api_key.get("/health")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["api_key_required"] is True
 
 
 class TestIngestSms:
@@ -108,6 +131,30 @@ class TestIngestSms:
         assert "sim:2" in inbox["source"]
         assert "sender:MPESA" in inbox["source"]
 
+    def test_ingest_requires_api_key_when_configured(self, client_with_api_key):
+        no_key = client_with_api_key.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert no_key.status_code == 401
+
+        bad_key = client_with_api_key.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+            headers={"X-API-Key": "wrong"},
+        )
+        assert bad_key.status_code == 401
+
+        ok = client_with_api_key.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+            headers={"X-API-Key": "secret123"},
+        )
+        assert ok.status_code == 201
+
 
 class TestListTransactions:
     def test_returns_list(self, client):
@@ -121,6 +168,36 @@ class TestListTransactions:
         data = json.loads(resp.data)
         assert isinstance(data, list)
         assert len(data) >= 1
+
+    def test_filters_transactions_by_sim_slot(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": SEND_SMS,
+                    "source": "android-termux",
+                    "meta": {"sim_slot": "1", "sender": "MPESA"},
+                }
+            ),
+            content_type="application/json",
+        )
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": SEND_SMS_2,
+                    "source": "android-termux",
+                    "meta": {"sim_slot": "2", "sender": "MPESA"},
+                }
+            ),
+            content_type="application/json",
+        )
+        resp = client.get("/transactions?sim_slot=2&limit=10")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert len(rows) == 1
+        assert rows[0]["transaction_id"] == "BC47YUJ"
+        assert rows[0]["sim_slot"] == "2"
 
 
 class TestInbox:
@@ -149,6 +226,72 @@ class TestInbox:
         assert isinstance(rows, list)
         assert len(rows) >= 1
         assert all(row.get("parse_status") == "failed" for row in rows)
+
+    def test_filters_inbox_by_sim_slot(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": SEND_SMS,
+                    "source": "android-termux",
+                    "meta": {"sim_slot": "1", "sender": "MPESA"},
+                }
+            ),
+            content_type="application/json",
+        )
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": SEND_SMS_2,
+                    "source": "android-termux",
+                    "meta": {"sim_slot": "2", "sender": "MPESA"},
+                }
+            ),
+            content_type="application/json",
+        )
+
+        resp = client.get("/inbox?sim_slot=1&limit=10")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert len(rows) == 1
+        assert rows[0]["sim_slot"] == "1"
+
+    def test_failed_inbox_report_endpoint(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": (
+                        "RDG6CIQWO4 Confirmed. Fuliza M-PESA amount is Ksh 60.00. "
+                        "Interest charged Ksh 0.60. Total Fuliza M-PESA outstanding "
+                        "amount is Ksh 309.33 due on 16/05/23."
+                    )
+                }
+            ),
+            content_type="application/json",
+        )
+        client.post(
+            "/sms",
+            data=json.dumps(
+                {
+                    "sms": (
+                        "RIC2JWGDRA confirmed.You bought Ksh100.00 of airtime on 12/9/23 at "
+                        "10:11 AM.New M-PESA balance is Ksh21,606.97."
+                    )
+                }
+            ),
+            content_type="application/json",
+        )
+
+        resp = client.get("/inbox/failed/report?limit=100&sample_size=2")
+        assert resp.status_code == 200
+        payload = json.loads(resp.data)
+        assert payload["status"] == "ok"
+        assert payload["scanned_failed_rows"] >= 2
+        classes = {item["class"] for item in payload["classes"]}
+        assert "fuliza_drawdown_notice" in classes
+        assert "airtime_purchase_receipt" in classes
 
 
 class TestExportCsv:

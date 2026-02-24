@@ -11,6 +11,7 @@ from pesa_logger.database import (
     get_transaction,
     get_inbox_sms,
     init_db,
+    list_inbox_sms,
     list_transactions,
     log_report_run,
     save_inbox_sms,
@@ -96,6 +97,36 @@ class TestListTransactions:
         assert len(rows) == 1
         assert rows[0]["category"] == "Utilities"
 
+    def test_filter_by_sim_slot(self, db):
+        inbox_sim1 = save_inbox_sms(
+            "SIM1 Confirmed. Ksh10 sent.",
+            db_path=db,
+            source="android-termux|sim:1|sender:MPESA",
+        )
+        inbox_sim2 = save_inbox_sms(
+            "SIM2 Confirmed. Ksh20 sent.",
+            db_path=db,
+            source="android-termux|sim:2|sender:MPESA",
+        )
+
+        save_transaction(
+            _make_tx("SIM1TX"),
+            db_path=db,
+            raw_sms_id=inbox_sim1["id"],
+            normalized_hash=inbox_sim1["normalized_hash"],
+        )
+        save_transaction(
+            _make_tx("SIM2TX"),
+            db_path=db,
+            raw_sms_id=inbox_sim2["id"],
+            normalized_hash=inbox_sim2["normalized_hash"],
+        )
+
+        rows = list_transactions(db_path=db, sim_slot="2")
+        assert len(rows) == 1
+        assert rows[0]["transaction_id"] == "SIM2TX"
+        assert rows[0]["sim_slot"] == "2"
+
 
 class TestUpdateCategory:
     def test_updates_category(self, db):
@@ -135,6 +166,22 @@ class TestInboxSms:
         updated = get_inbox_sms(inbox_id=row["id"], db_path=db)
         assert updated["parse_status"] == "failed"
         assert updated["parse_error"] == "test failure"
+
+    def test_list_inbox_can_filter_by_sim_slot(self, db):
+        save_inbox_sms(
+            "AAA Confirmed. Ksh10 sent.",
+            db_path=db,
+            source="android-termux|sim:1|sender:MPESA",
+        )
+        save_inbox_sms(
+            "BBB Confirmed. Ksh20 sent.",
+            db_path=db,
+            source="android-termux|sim:2|sender:MPESA",
+        )
+
+        rows = list_inbox_sms(db_path=db, sim_slot="1", limit=50)
+        assert len(rows) == 1
+        assert rows[0]["sim_slot"] == "1"
 
 
 class TestReportRuns:

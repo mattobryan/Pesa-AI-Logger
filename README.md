@@ -44,6 +44,7 @@ Excel / CSV Export  +  Financial Analytics
 | Parser corpus validation | `pesa_logger/corpus.py` |
 | Audited transaction corrections | `pesa_logger/database.py` + `/corrections` |
 | Tamper-evident hash-chain ledger | `pesa_logger/database.py` + `/ledger/*` |
+| Failed-message classification reports | `pesa_logger/failure_report.py` + `/inbox/failed/report` |
 | Phone-side pilot forwarder (Termux) | `phone_module/script/` |
 
 ---
@@ -95,13 +96,14 @@ Output:
 ### 3. Start the webhook server
 
 ```bash
-python main.py serve --port 5000
+python main.py serve --host 0.0.0.0 --port 5000 --api-key "your-secret"
 ```
 
 Send an SMS via HTTP POST:
 ```bash
 curl -X POST http://localhost:5000/sms \
      -H "Content-Type: application/json" \
+     -H "X-API-Key: your-secret" \
      -d '{"sms": "BC47YUI Confirmed. Ksh1,000.00 sent to JOHN DOE ..."}'
 ```
 
@@ -191,6 +193,24 @@ Reparse failed rows after parser updates:
 python main.py reparse-failed --limit 200
 ```
 
+Classify failed rows into receipt families (Fuliza, airtime, merchant acknowledgements, unknown):
+
+```bash
+python main.py failed-report --limit 5000 --sample-size 3
+```
+
+Filter inbox rows by SIM slot:
+
+```bash
+python main.py list-inbox --sim-slot 1 --limit 200
+```
+
+List canonical transactions filtered by SIM slot:
+
+```bash
+python main.py list-transactions --sim-slot 2 --limit 200
+```
+
 ### 16. Verify tamper-evident ledger chain
 
 ```bash
@@ -204,6 +224,20 @@ If the chain is empty but your DB already has historical records, run one-time b
 python main.py rebuild-ledger
 ```
 
+### 17. Run local live pilot (HTTP ingest smoke test)
+
+```bash
+python scripts/live_pilot.py
+```
+
+### 18. Deploy receiver on tablet over Tailscale (private)
+
+Runbook:
+
+```bash
+docs/TABLET_TAILSCALE_DEPLOYMENT.md
+```
+
 ---
 
 ## API Endpoints
@@ -211,8 +245,8 @@ python main.py rebuild-ledger
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
-| `POST` | `/sms` | Ingest a raw M-Pesa SMS |
-| `GET` | `/transactions` | List stored transactions |
+| `POST` | `/sms` | Ingest a raw M-Pesa SMS (requires `X-API-Key` when configured) |
+| `GET` | `/transactions` | List stored transactions (`type`, `category`, `sim_slot`, `limit`) |
 | `GET` | `/analytics/insights` | AI-generated insights |
 | `GET` | `/analytics/summary/weekly` | Weekly summary |
 | `GET` | `/analytics/summary/monthly` | Monthly summary |
@@ -222,7 +256,8 @@ python main.py rebuild-ledger
 | `GET` | `/monitor/heartbeat/history` | Heartbeat telemetry history |
 | `POST` | `/corrections` | Apply audited correction |
 | `GET` | `/corrections` | List correction audit history |
-| `GET` | `/inbox` | List raw stored SMS rows |
+| `GET` | `/inbox` | List raw stored SMS rows (`parse_status`, `sim_slot`, `limit`) |
+| `GET` | `/inbox/failed/report` | Classify and summarize failed parse rows |
 | `GET` | `/ledger/verify` | Verify hash-chain integrity |
 | `GET` | `/ledger/events` | List hash-chain ledger events |
 
@@ -250,6 +285,7 @@ pesa_logger/
 ├── corpus.py         # Corpus loader and parser validator
 ├── parser.py         # Regex-based SMS parsing engine
 ├── database.py       # SQLite storage layer
+├── failure_report.py # Failed-message classification + reporting
 ├── categorizer.py    # Rule-based categorization + tagging
 ├── anomaly.py        # Statistical anomaly detection
 ├── reports.py        # CSV / Excel export & financial summaries
@@ -265,6 +301,7 @@ tests/
 ├── test_automation.py
 ├── test_monitoring.py
 ├── test_reports.py
+├── test_failure_report.py
 └── test_webhook.py
 scripts/
 ├── backup_db.py
@@ -277,6 +314,7 @@ phone_module/
 main.py               # CLI entry point
 requirements.txt
 docs/IMPLEMENTATION_LOG.md
+docs/TABLET_TAILSCALE_DEPLOYMENT.md
 dev/README.md
 ```
 

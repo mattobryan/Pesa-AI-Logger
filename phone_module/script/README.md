@@ -29,6 +29,7 @@ This is the fastest private-use path to forward M-Pesa SMS to your local ledger.
    - `python mpesa_forwarder.py --init-config`
 3. Edit `config.json`:
    - Set `endpoint_url` to your backend `/sms` URL.
+   - If backend requires key, set `api_key` to match server `--api-key`.
    - Keep required terms as `m-pesa`, `confirmed`, `ksh`.
 
 Verify effective runtime config and paths:
@@ -41,6 +42,30 @@ This prints:
 - actual config path being read
 - actual state/log file paths
 - effective endpoint URL
+
+## Private Tailscale mode (recommended)
+
+Use tablet/laptop receiver over Tailscale (not public Wi-Fi open port):
+
+1. Start server on receiver:
+
+```bash
+python main.py serve --host <receiver_tailscale_ip> --port 5000 --api-key "<secret>"
+```
+
+2. On phone `config.json`:
+   - `"endpoint_url": "http://<receiver_tailscale_ip>:5000/sms"`
+   - `"api_key": "<secret>"`
+
+3. Test:
+
+```bash
+curl -i http://<receiver_tailscale_ip>:5000/health
+python mpesa_forwarder.py --once
+```
+
+Full runbook:
+- `docs/TABLET_TAILSCALE_DEPLOYMENT.md`
 
 ## Run
 

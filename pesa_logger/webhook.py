@@ -27,9 +27,13 @@ from pesa_logger.database import (
 )
 from pesa_logger.ingestion import ingest_sms_text
 from pesa_logger.monitoring import heartbeat_status
+from pesa_logger.failure_report import build_failed_report
 
 
-def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-defined]
+def create_app(
+    db_path: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> "Flask":  # type: ignore[name-defined]
     """Create and configure the Flask application."""
     try:
         from flask import Flask, jsonify, request
@@ -41,6 +45,9 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
 
     app = Flask(__name__)
     _db = db_path or os.environ.get("PESA_DB_PATH", "pesa_logger.db")
+    _api_key = (
+        (api_key if api_key is not None else os.environ.get("PESA_API_KEY", "")) or ""
+    ).strip()
 
     init_db(_db)
 
@@ -58,7 +65,13 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
 
     @app.route("/health", methods=["GET"])
     def health():
-        return jsonify({"status": "ok", "db": _db})
+        return jsonify(
+            {
+                "status": "ok",
+                "db": _db,
+                "api_key_required": bool(_api_key),
+            }
+        )
 
     @app.route("/monitor/heartbeat", methods=["GET"])
     def heartbeat():
@@ -88,6 +101,11 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
 
         Alternatively, the raw SMS text may be sent as plain text.
         """
+        if _api_key:
+            provided = request.headers.get("X-API-Key", "")
+            if not provided or provided != _api_key:
+                return jsonify({"error": "Unauthorized"}), 401
+
         if request.is_json:
             body = request.get_json(silent=True) or {}
             sms_text = body.get("sms", "")
@@ -120,13 +138,28 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
         limit = int(request.args.get("limit", 200))
         oldest_first = request.args.get("oldest_first", "0").lower() in {"1", "true", "yes"}
         parse_status = request.args.get("parse_status")
+        sim_slot = request.args.get("sim_slot")
         rows = list_inbox_sms(
             db_path=_db,
             limit=limit,
             oldest_first=oldest_first,
             parse_status=parse_status or None,
+            sim_slot=sim_slot or None,
         )
         return jsonify(rows)
+
+    @app.route("/inbox/failed/report", methods=["GET"])
+    def failed_inbox_report():
+        limit = int(request.args.get("limit", 5000))
+        sample_size = int(request.args.get("sample_size", 3))
+        sim_slot = request.args.get("sim_slot")
+        result = build_failed_report(
+            db_path=_db,
+            limit=limit,
+            sample_size=sample_size,
+            sim_slot=sim_slot or None,
+        )
+        return jsonify(result)
 
     @app.route("/transactions", methods=["GET"])
     def list_all():
@@ -135,12 +168,14 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
 
         tx_type = request.args.get("type")
         category = request.args.get("category")
+        sim_slot = request.args.get("sim_slot")
         limit = int(request.args.get("limit", 100))
 
         rows = list_transactions(
             db_path=_db,
             tx_type=tx_type or None,
             category=category or None,
+            sim_slot=sim_slot or None,
             limit=limit,
         )
         return jsonify(rows)

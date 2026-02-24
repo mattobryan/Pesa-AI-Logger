@@ -41,6 +41,19 @@ All notable changes to this project will be documented in this file.
   - `Withdraw Ksh... from ...` format (including `...PMWithdraw...` concatenation)
   - balances formatted as `Ksh 519.77` (space after currency token)
 - Inbox listing now supports parse-status filtering and failed-row reparse workflow.
+- Failed-message classification reporting module (`pesa_logger/failure_report.py`) with deterministic receipt-family grouping.
+- New CLI commands/filters for forensic operations:
+  - `failed-report`
+  - `list-transactions`
+  - `--sim-slot` support on `list-inbox`
+- New API capabilities:
+  - `GET /inbox/failed/report`
+  - `sim_slot` filtering on `/inbox` and `/transactions`
+- SIM-slot extraction in query outputs (`sim_slot`) from stamped source metadata (`sim:<slot>`).
+- Live HTTP smoke-test script: `scripts/live_pilot.py`.
+- Optional API-key auth for ingestion endpoint (`X-API-Key`) via `create_app(..., api_key=...)` / `main.py serve --api-key`.
+- `main.py serve` host binding support via `--host` (useful for binding to Tailscale interface only).
+- Tablet deployment runbook for private Tailscale-only receiver setup: `docs/TABLET_TAILSCALE_DEPLOYMENT.md`.
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.
@@ -53,6 +66,10 @@ All notable changes to this project will be documented in this file.
 - `pesa_logger/webhook.py` now stamps source metadata from forwarder payload meta and exposes inbox/ledger endpoints.
 - `pesa_logger/database.py` now appends signed chain events for raw saves, canonical inserts, and corrections.
 - `phone_module/script/mpesa_forwarder.py` now supports paged historical backfill and SIM slot capture.
+- `pesa_logger/database.py` now supports SIM-slot filtered inbox/transaction queries using source metadata tokens.
+- `pesa_logger/webhook.py` now exposes failed-inbox classification reporting and SIM-slot query filters.
+- `pesa_logger/webhook.py` now reports `api_key_required` on `/health`.
+- `phone_module/script/README.md` now documents Tailscale private mode and API-key usage.
 
 ### Roadmap Checklist
 - [x] Heartbeat + silence alert monitor
@@ -62,3 +79,5 @@ All notable changes to this project will be documented in this file.
 - [x] Phone pilot forwarder module (Termux script)
 - [x] Historical SMS backfill mode (paged import)
 - [x] Tamper-evident ledger verification
+- [x] Failed-message classification reporting
+- [x] SIM-slot transaction/inbox separation filters

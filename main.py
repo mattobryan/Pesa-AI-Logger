@@ -43,8 +43,14 @@ def _parse_args():
 
     # --serve
     serve_cmd = subparsers.add_parser("serve", help="Start the webhook API server")
+    serve_cmd.add_argument("--host", default="0.0.0.0", help="Bind host/IP")
     serve_cmd.add_argument("--port", type=int, default=5000)
     serve_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    serve_cmd.add_argument(
+        "--api-key",
+        default=None,
+        help="Optional required API key for /sms (sent via X-API-Key)",
+    )
 
     # --export-csv
     csv_cmd = subparsers.add_parser("export-csv", help="Export transactions to CSV")
@@ -153,6 +159,26 @@ def _parse_args():
         choices=["pending", "success", "failed", "duplicate"],
         help="Optional parse_status filter",
     )
+    list_inbox_cmd.add_argument(
+        "--sim-slot",
+        default=None,
+        help="Optional SIM slot filter from source metadata (e.g. 1, 2)",
+    )
+
+    # --list-transactions
+    list_tx_cmd = subparsers.add_parser(
+        "list-transactions",
+        help="List canonical transactions with optional filters",
+    )
+    list_tx_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    list_tx_cmd.add_argument("--limit", type=int, default=200, help="Rows to return")
+    list_tx_cmd.add_argument("--type", default=None, help="Optional transaction type filter")
+    list_tx_cmd.add_argument("--category", default=None, help="Optional category filter")
+    list_tx_cmd.add_argument(
+        "--sim-slot",
+        default=None,
+        help="Optional SIM slot filter from source metadata (e.g. 1, 2)",
+    )
 
     # --reparse-failed
     reparse_cmd = subparsers.add_parser(
@@ -194,6 +220,25 @@ def _parse_args():
         help="Rebuild from scratch even when ledger_chain already has events",
     )
 
+    # --failed-report
+    failed_report_cmd = subparsers.add_parser(
+        "failed-report",
+        help="Classify and summarize failed inbox messages",
+    )
+    failed_report_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    failed_report_cmd.add_argument("--limit", type=int, default=5000, help="Rows to scan")
+    failed_report_cmd.add_argument(
+        "--sample-size",
+        type=int,
+        default=3,
+        help="Sample rows per failed-message class",
+    )
+    failed_report_cmd.add_argument(
+        "--sim-slot",
+        default=None,
+        help="Optional SIM slot filter from source metadata (e.g. 1, 2)",
+    )
+
     return parser.parse_args()
 
 
@@ -218,9 +263,11 @@ def main():
         from pesa_logger.webhook import create_app
 
         os.environ["PESA_DB_PATH"] = args.db
-        app = create_app(db_path=args.db)
-        print(f"Starting Pesa AI Logger server on port {args.port} …")
-        app.run(host="0.0.0.0", port=args.port, debug=False)
+        if args.api_key:
+            os.environ["PESA_API_KEY"] = args.api_key
+        app = create_app(db_path=args.db, api_key=args.api_key)
+        print(f"Starting Pesa AI Logger server on {args.host}:{args.port} …")
+        app.run(host=args.host, port=args.port, debug=False)
 
     elif args.command == "export-csv":
         from pesa_logger.reports import export_csv
@@ -341,6 +388,19 @@ def main():
             limit=args.limit,
             oldest_first=args.oldest_first,
             parse_status=args.parse_status,
+            sim_slot=args.sim_slot,
+        )
+        print(json.dumps(rows, indent=2))
+
+    elif args.command == "list-transactions":
+        from pesa_logger.database import list_transactions
+
+        rows = list_transactions(
+            db_path=args.db,
+            tx_type=args.type,
+            category=args.category,
+            limit=args.limit,
+            sim_slot=args.sim_slot,
         )
         print(json.dumps(rows, indent=2))
 
@@ -385,12 +445,24 @@ def main():
         if verification and not verification.get("valid", False):
             sys.exit(2)
 
+    elif args.command == "failed-report":
+        from pesa_logger.failure_report import build_failed_report
+
+        result = build_failed_report(
+            db_path=args.db,
+            limit=args.limit,
+            sim_slot=args.sim_slot,
+            sample_size=args.sample_size,
+        )
+        print(json.dumps(result, indent=2))
+
     else:
         print(
             "Pesa AI Logger. Run with --help for usage.\n\n"
             "Commands: sms, serve, export-csv, export-excel, insights, anomalies, summary, "
             "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections, "
-            "list-inbox, reparse-failed, verify-ledger, ledger-events, rebuild-ledger"
+            "list-inbox, list-transactions, reparse-failed, verify-ledger, "
+            "ledger-events, rebuild-ledger, failed-report"
         )
 
 

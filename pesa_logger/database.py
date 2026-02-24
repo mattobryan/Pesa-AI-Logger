@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -24,6 +25,7 @@ except ZoneInfoNotFoundError:
     _NAIROBI_TZ = timezone(timedelta(hours=3), name="Africa/Nairobi")
 
 _VALID_PARSE_STATUSES = {"pending", "success", "failed", "duplicate"}
+_SIM_SLOT_RE = re.compile(r"(?:^|\|)sim:(?P<slot>[^|]+)(?:\||$)", re.IGNORECASE)
 
 
 def _utc_now_iso() -> str:
@@ -65,6 +67,28 @@ def normalize_sms_text(raw_text: str) -> str:
 def sms_hash(raw_text: str) -> str:
     """Return SHA-256 hash for a normalized SMS body."""
     return hashlib.sha256(normalize_sms_text(raw_text).encode("utf-8")).hexdigest()
+
+
+def extract_sim_slot(source: Optional[str]) -> Optional[str]:
+    """Extract SIM slot token from source metadata, e.g. `sim:2`."""
+    if not source:
+        return None
+    match = _SIM_SLOT_RE.search(str(source))
+    if not match:
+        return None
+    slot = (match.group("slot") or "").strip()
+    return slot or None
+
+
+def _build_sim_source_clause(field_name: str, sim_slot: str) -> tuple[str, list]:
+    """Return SQL clause + params to match `sim:<slot>` token in a source field."""
+    token = f"sim:{sim_slot.strip()}"
+    clause = (
+        f"({field_name} = ? OR {field_name} LIKE ? OR "
+        f"{field_name} LIKE ? OR {field_name} LIKE ?)"
+    )
+    params = [token, f"{token}|%", f"%|{token}", f"%|{token}|%"]
+    return clause, params
 
 
 def _json_canonical(data: Dict[str, Any]) -> str:
@@ -191,6 +215,10 @@ def _row_to_compat_dict(row: sqlite3.Row) -> dict:
     data["counterparty_phone"] = data.get("phone")
     data["account_number"] = data.get("account_reference")
     data["transaction_cost"] = data.get("fee")
+    source_value = data.get("source") or data.get("inbox_source")
+    if source_value:
+        data["source"] = source_value
+        data["sim_slot"] = extract_sim_slot(str(source_value))
 
     tags_json = data.get("tags_json")
     tags_csv = ""
@@ -475,6 +503,7 @@ def list_inbox_sms(
     limit: int = 500,
     oldest_first: bool = False,
     parse_status: Optional[str] = None,
+    sim_slot: Optional[str] = None,
 ) -> List[dict]:
     """List raw inbox SMS rows for audit/forensics."""
     init_db(db_path)
@@ -482,16 +511,28 @@ def list_inbox_sms(
     with _cursor(db_path) as cur:
         query = "SELECT * FROM inbox_sms"
         params: list = []
+        filters: List[str] = []
         if parse_status:
-            query += " WHERE parse_status = ?"
+            filters.append("parse_status = ?")
             params.append(parse_status)
+        if sim_slot:
+            clause, sim_params = _build_sim_source_clause("source", sim_slot)
+            filters.append(clause)
+            params.extend(sim_params)
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
         query += f" ORDER BY received_at_utc {order}, id {order} LIMIT ?"
         params.append(limit)
         cur.execute(
             query,
             params,
         )
-        return [dict(row) for row in cur.fetchall()]
+        rows: List[dict] = []
+        for row in cur.fetchall():
+            data = dict(row)
+            data["sim_slot"] = extract_sim_slot(data.get("source"))
+            rows.append(data)
+        return rows
 
 
 def update_inbox_parse_status(
@@ -638,11 +679,17 @@ def list_transactions(
     category: Optional[str] = None,
     since: Optional[datetime] = None,
     until: Optional[datetime] = None,
+    sim_slot: Optional[str] = None,
     limit: int = 500,
 ) -> List[dict]:
     """Return transactions filtered by optional criteria."""
     init_db(db_path)
-    query = "SELECT * FROM transactions WHERE 1=1"
+    query = (
+        "SELECT transactions.*, inbox_sms.source AS source "
+        "FROM transactions "
+        "LEFT JOIN inbox_sms ON inbox_sms.id = transactions.raw_sms_id "
+        "WHERE 1=1"
+    )
     params: list = []
 
     if tx_type:
@@ -657,8 +704,12 @@ def list_transactions(
     if until:
         query += " AND event_time_utc <= ?"
         params.append(_query_time_to_utc_iso(until))
+    if sim_slot:
+        clause, sim_params = _build_sim_source_clause("inbox_sms.source", sim_slot)
+        query += f" AND {clause}"
+        params.extend(sim_params)
 
-    query += " ORDER BY event_time_utc DESC, id DESC LIMIT ?"
+    query += " ORDER BY transactions.event_time_utc DESC, transactions.id DESC LIMIT ?"
     params.append(limit)
 
     with _cursor(db_path) as cur:

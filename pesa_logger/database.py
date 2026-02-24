@@ -474,18 +474,22 @@ def list_inbox_sms(
     db_path: str = _DEFAULT_DB,
     limit: int = 500,
     oldest_first: bool = False,
+    parse_status: Optional[str] = None,
 ) -> List[dict]:
     """List raw inbox SMS rows for audit/forensics."""
     init_db(db_path)
     order = "ASC" if oldest_first else "DESC"
     with _cursor(db_path) as cur:
+        query = "SELECT * FROM inbox_sms"
+        params: list = []
+        if parse_status:
+            query += " WHERE parse_status = ?"
+            params.append(parse_status)
+        query += f" ORDER BY received_at_utc {order}, id {order} LIMIT ?"
+        params.append(limit)
         cur.execute(
-            f"""
-            SELECT * FROM inbox_sms
-            ORDER BY received_at_utc {order}, id {order}
-            LIMIT ?
-            """,
-            (limit,),
+            query,
+            params,
         )
         return [dict(row) for row in cur.fetchall()]
 

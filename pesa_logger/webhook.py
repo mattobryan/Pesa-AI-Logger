@@ -119,10 +119,12 @@ def create_app(db_path: Optional[str] = None) -> "Flask":  # type: ignore[name-d
     def list_inbox():
         limit = int(request.args.get("limit", 200))
         oldest_first = request.args.get("oldest_first", "0").lower() in {"1", "true", "yes"}
+        parse_status = request.args.get("parse_status")
         rows = list_inbox_sms(
             db_path=_db,
             limit=limit,
             oldest_first=oldest_first,
+            parse_status=parse_status or None,
         )
         return jsonify(rows)
 

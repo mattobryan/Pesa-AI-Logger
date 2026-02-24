@@ -11,6 +11,7 @@ Use UTC timestamps when adding new entries.
 | 2026-02-23T19:20:00Z | Codex | Status reporting and tree hygiene | Added `docs/PROJECT_STATUS_REPORT.md`, moved non-runtime report build utilities to `dev/tools/`, and tightened doc artifact ignore rules to keep the project tree disciplined. |
 | 2026-02-24T01:58:00Z | Codex | Historical backfill + tamper-evident ledger | Added forwarder backfill paging mode (`--backfill`) with SIM metadata stamping, append-only hash-chain ledger (`ledger_chain`) with verification APIs/CLI, and raw inbox listing endpoints/commands. |
 | 2026-02-24T02:44:00Z | Codex | Ledger chain bootstrap tooling | Added `rebuild-ledger` command to backfill hash-chain events from pre-existing inbox/transaction/correction records and improved verifier hints when chain is empty but data exists. |
+| 2026-02-24T03:08:00Z | Codex | Parser variant recovery + failed-row replay | Patched parser patterns for `Withdraw Ksh... from ...` and `Ksh <space>amount` balances, added regression tests, and introduced `reparse-failed` command to reprocess previously failed inbox rows. |
 
 ## Phase Checklist
 
@@ -22,3 +23,4 @@ Use UTC timestamps when adding new entries.
 - [x] Historical SMS backfill mode (paged import)
 - [x] Tamper-evident hash-chain ledger verification
 - [x] One-time ledger-chain rebuild for historical data
+- [x] Failed-row reparse path after parser upgrades

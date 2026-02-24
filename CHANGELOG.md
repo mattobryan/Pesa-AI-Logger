@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
   - `GET /ledger/events`
 - New CLI commands:
   - `list-inbox`
+  - `reparse-failed`
   - `verify-ledger`
   - `ledger-events`
   - `rebuild-ledger`
@@ -36,6 +37,10 @@ All notable changes to this project will be documented in this file.
 - Fallback event-time ingestion from forwarder metadata (`sms_timestamp_utc`) when parser timestamp is missing.
 - Ledger verifier now reports when historical data exists but `ledger_chain` is empty and recommends rebuild.
 - One-time ledger backfill command to chain existing rows: `python main.py rebuild-ledger`.
+- Parser hardening for SMS variants:
+  - `Withdraw Ksh... from ...` format (including `...PMWithdraw...` concatenation)
+  - balances formatted as `Ksh 519.77` (space after currency token)
+- Inbox listing now supports parse-status filtering and failed-row reparse workflow.
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.

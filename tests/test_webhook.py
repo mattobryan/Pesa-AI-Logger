@@ -137,6 +137,19 @@ class TestInbox:
         assert len(rows) >= 1
         assert "raw_text" in rows[0]
 
+    def test_filters_inbox_by_parse_status(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps({"sms": "not mpesa"}),
+            content_type="application/json",
+        )
+        resp = client.get("/inbox?parse_status=failed&limit=10")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert isinstance(rows, list)
+        assert len(rows) >= 1
+        assert all(row.get("parse_status") == "failed" for row in rows)
+
 
 class TestExportCsv:
     def test_returns_csv_content(self, client):

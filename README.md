@@ -179,6 +179,18 @@ phone_module/script/README.md
 python main.py list-inbox --oldest-first --limit 500
 ```
 
+List only failed parse rows:
+
+```bash
+python main.py list-inbox --parse-status failed --limit 200
+```
+
+Reparse failed rows after parser updates:
+
+```bash
+python main.py reparse-failed --limit 200
+```
+
 ### 16. Verify tamper-evident ledger chain
 
 ```bash

@@ -18,7 +18,7 @@ The project is in a pilot-ready backend state with a working end-to-end pipeline
 - historical backfill import mode (phone forwarder)
 - tamper-evident hash-chain ledger + verification
 
-Test status is green: `116 passed`.
+Test status is green: `120 passed`.
 
 ## 2. What Is Implemented
 
@@ -113,7 +113,7 @@ Active commands include:
 
 Current automated verification:
 
-- Full suite result: `116 passed`
+- Full suite result: `120 passed`
 - Includes dedicated tests for:
   - ingestion
   - monitoring

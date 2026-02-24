@@ -2,8 +2,16 @@
 
 import pytest
 
-from pesa_logger.database import close_connection, get_inbox_sms, get_transaction, init_db, list_transactions
-from pesa_logger.ingestion import ingest_sms_text
+from pesa_logger.database import (
+    close_connection,
+    get_inbox_sms,
+    get_transaction,
+    init_db,
+    list_transactions,
+    save_inbox_sms,
+    update_inbox_parse_status,
+)
+from pesa_logger.ingestion import ingest_sms_text, reparse_failed_inbox_sms
 
 
 SEND_SMS = (
@@ -62,3 +70,30 @@ def test_fallback_event_time_is_used_when_parser_timestamp_missing(db):
 
     tx = get_transaction("TS001", db_path=db)
     assert tx["timestamp"] == "2026-02-20T10:15:00"
+
+
+def test_reparse_failed_rows_can_be_recovered_after_parser_update(db):
+    withdraw_variant = (
+        "UBLGC7B1H1 Confirmed.on 21/2/26 at 1:42 PMWithdraw Ksh500.00 from "
+        "323801 - Ndeche Communications Karuri Banana; New M-PESA balance is "
+        "Ksh211.25. Transaction cost, Ksh29.00."
+    )
+    inbox = save_inbox_sms(withdraw_variant, db_path=db, source="test")
+    update_inbox_parse_status(
+        inbox_id=inbox["id"],
+        parse_status="failed",
+        parse_error="Could not parse SMS as M-Pesa transaction",
+        db_path=db,
+    )
+
+    result = reparse_failed_inbox_sms(db_path=db, limit=100)
+    assert result["scanned"] == 1
+    assert result["reparsed_saved"] == 1
+    assert result["still_failed"] == 0
+
+    rows = list_transactions(db_path=db)
+    assert len(rows) == 1
+    assert rows[0]["transaction_id"] == "UBLGC7B1H1"
+
+    updated = get_inbox_sms(inbox_id=inbox["id"], db_path=db)
+    assert updated["parse_status"] == "success"

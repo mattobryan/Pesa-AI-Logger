@@ -147,6 +147,20 @@ def _parse_args():
         action="store_true",
         help="Return oldest rows first",
     )
+    list_inbox_cmd.add_argument(
+        "--parse-status",
+        default=None,
+        choices=["pending", "success", "failed", "duplicate"],
+        help="Optional parse_status filter",
+    )
+
+    # --reparse-failed
+    reparse_cmd = subparsers.add_parser(
+        "reparse-failed",
+        help="Re-run parser on inbox rows currently marked failed",
+    )
+    reparse_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    reparse_cmd.add_argument("--limit", type=int, default=1000, help="Rows to scan")
 
     # --verify-ledger
     verify_ledger_cmd = subparsers.add_parser(
@@ -326,8 +340,18 @@ def main():
             db_path=args.db,
             limit=args.limit,
             oldest_first=args.oldest_first,
+            parse_status=args.parse_status,
         )
         print(json.dumps(rows, indent=2))
+
+    elif args.command == "reparse-failed":
+        from pesa_logger.ingestion import reparse_failed_inbox_sms
+
+        result = reparse_failed_inbox_sms(
+            db_path=args.db,
+            limit=args.limit,
+        )
+        print(json.dumps(result, indent=2))
 
     elif args.command == "verify-ledger":
         from pesa_logger.database import verify_ledger_chain
@@ -366,7 +390,7 @@ def main():
             "Pesa AI Logger. Run with --help for usage.\n\n"
             "Commands: sms, serve, export-csv, export-excel, insights, anomalies, summary, "
             "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections, "
-            "list-inbox, verify-ledger, ledger-events, rebuild-ledger"
+            "list-inbox, reparse-failed, verify-ledger, ledger-events, rebuild-ledger"
         )
 
 

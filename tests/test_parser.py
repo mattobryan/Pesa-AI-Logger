@@ -50,6 +50,18 @@ REVERSAL_SMS = (
 
 INVALID_SMS = "Hello, how are you today?"
 
+WITHDRAW_VARIANT_SMS = (
+    "UBLGC7B1H1 Confirmed.on 21/2/26 at 1:42 PMWithdraw Ksh500.00 from "
+    "323801 - Ndeche Communications Karuri Banana; New M-PESA balance is "
+    "Ksh211.25. Transaction cost, Ksh29.00."
+)
+
+SEND_VARIANT_BALANCE_SPACE_SMS = (
+    "UBK1Q7IUTZ Confirmed. Ksh10,500.00 sent to BRIAN  OMWAMBA 0725829629 "
+    "on 20/2/26 at 4:59 PM. New M-PESA balance is Ksh 519.77. "
+    "Transaction cost, Ksh100.00."
+)
+
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -152,6 +164,26 @@ class TestParseWithdraw:
     def test_amount(self):
         tx = parse_sms(WITHDRAW_SMS)
         assert tx.amount == 500.0
+
+    def test_withdraw_variant_without_space_before_withdraw(self):
+        tx = parse_sms(WITHDRAW_VARIANT_SMS)
+        assert tx is not None
+        assert tx.type == "withdraw"
+        assert tx.transaction_id == "UBLGC7B1H1"
+        assert tx.amount == 500.0
+        assert tx.balance == 211.25
+        assert tx.transaction_cost == 29.0
+
+
+class TestParseSendVariants:
+    def test_send_variant_with_balance_space_after_ksh(self):
+        tx = parse_sms(SEND_VARIANT_BALANCE_SPACE_SMS)
+        assert tx is not None
+        assert tx.type == "send"
+        assert tx.transaction_id == "UBK1Q7IUTZ"
+        assert tx.amount == 10500.0
+        assert tx.balance == 519.77
+        assert tx.transaction_cost == 100.0
 
 
 class TestParseDeposit:

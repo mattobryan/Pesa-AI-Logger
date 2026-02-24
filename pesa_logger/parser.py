@@ -52,7 +52,7 @@ class Transaction:
 
 # ─── Amount helpers ──────────────────────────────────────────────────────────
 
-_AMOUNT_RE = re.compile(r"Ksh([\d,]+\.?\d*)", re.IGNORECASE)
+_AMOUNT_RE = re.compile(r"Ksh\s*([\d,]+\.?\d*)", re.IGNORECASE)
 
 
 def _parse_amount(text: str) -> float:
@@ -98,59 +98,59 @@ def _parse_timestamp(text: str) -> Optional[datetime]:
 _PATTERNS = {
     "receive": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?You have received Ksh(?P<amount>[\d,]+\.?\d*)"
+        r".*?You have received Ksh\s*(?P<amount>[\d,]+\.?\d*)"
         r"(?: from (?P<name>[A-Z ]+?) (?P<phone>\d{10,12}))?"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)",
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)",
         re.IGNORECASE | re.DOTALL,
     ),
     "send": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) sent to"
+        r".*?Ksh\s*(?P<amount>[\d,]+\.?\d*) sent to"
         r"(?: (?P<name>[A-Z ]+?) (?P<phone>\d{10,12}))?"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)"
-        r"(?:.*?cost,? Ksh(?P<cost>[\d,]+\.?\d*))?",
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)"
+        r"(?:.*?cost,?\s*Ksh\s*(?P<cost>[\d,]+\.?\d*))?",
         re.IGNORECASE | re.DOTALL,
     ),
     "paybill": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) paid to (?P<name>[A-Z0-9 &\-\.]+)"
+        r".*?Ksh\s*(?P<amount>[\d,]+\.?\d*) paid to (?P<name>[A-Z0-9 &\-\.]+)"
         r" for account (?P<account>\S+)"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)"
-        r"(?:.*?cost,? Ksh(?P<cost>[\d,]+\.?\d*))?",
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)"
+        r"(?:.*?cost,?\s*Ksh\s*(?P<cost>[\d,]+\.?\d*))?",
         re.IGNORECASE | re.DOTALL,
     ),
     # airtime must be checked before the generic till pattern
     "airtime": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) paid to Airtime"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)",
+        r".*?Ksh\s*(?P<amount>[\d,]+\.?\d*) paid to Airtime"
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)",
         re.IGNORECASE | re.DOTALL,
     ),
     "till": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) paid to (?P<name>[A-Z0-9 &\-\.]+)"
+        r".*?Ksh\s*(?P<amount>[\d,]+\.?\d*) paid to (?P<name>[A-Z0-9 &\-\.]+)"
         r"(?! for account)"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)"
-        r"(?:.*?cost,? Ksh(?P<cost>[\d,]+\.?\d*))?",
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)"
+        r"(?:.*?cost,?\s*Ksh\s*(?P<cost>[\d,]+\.?\d*))?",
         re.IGNORECASE | re.DOTALL,
     ),
     "withdraw": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) withdrawn"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)"
-        r"(?:.*?cost,? Ksh(?P<cost>[\d,]+\.?\d*))?",
+        r".*?(?:Withdraw\s*)?Ksh\s*(?P<amount>[\d,]+\.?\d*)\s*(?:withdrawn|from)\b"
+        r".*?(?:New\s+M-?PESA\s+)?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)"
+        r"(?:.*?cost,?\s*Ksh\s*(?P<cost>[\d,]+\.?\d*))?",
         re.IGNORECASE | re.DOTALL,
     ),
     "deposit": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?Ksh(?P<amount>[\d,]+\.?\d*) deposited"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)",
+        r".*?Ksh\s*(?P<amount>[\d,]+\.?\d*) deposited"
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)",
         re.IGNORECASE | re.DOTALL,
     ),
     "reversal": re.compile(
         r"(?P<tid>[A-Z0-9]+) Confirmed\."
-        r".*?reversal of Ksh(?P<amount>[\d,]+\.?\d*)"
-        r".*?balance is Ksh(?P<balance>[\d,]+\.?\d*)",
+        r".*?reversal of Ksh\s*(?P<amount>[\d,]+\.?\d*)"
+        r".*?balance is Ksh\s*(?P<balance>[\d,]+\.?\d*)",
         re.IGNORECASE | re.DOTALL,
     ),
 }

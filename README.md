@@ -186,6 +186,12 @@ python main.py verify-ledger
 python main.py ledger-events --limit 20
 ```
 
+If the chain is empty but your DB already has historical records, run one-time backfill:
+
+```bash
+python main.py rebuild-ledger
+```
+
 ---
 
 ## API Endpoints

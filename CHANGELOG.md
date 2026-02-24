@@ -28,11 +28,14 @@ All notable changes to this project will be documented in this file.
   - `list-inbox`
   - `verify-ledger`
   - `ledger-events`
+  - `rebuild-ledger`
 - Forwarder historical import mode with paging:
   - `python mpesa_forwarder.py --once --backfill`
   - optional `--backfill-page-size` and `--backfill-max-pages`
 - Forwarder SIM metadata capture in webhook source stamping (`sim:<slot>`, `sender:<origin>`).
 - Fallback event-time ingestion from forwarder metadata (`sms_timestamp_utc`) when parser timestamp is missing.
+- Ledger verifier now reports when historical data exists but `ledger_chain` is empty and recommends rebuild.
+- One-time ledger backfill command to chain existing rows: `python main.py rebuild-ledger`.
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.

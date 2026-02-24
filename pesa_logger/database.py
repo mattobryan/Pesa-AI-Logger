@@ -995,6 +995,25 @@ def verify_ledger_chain(db_path: str = _DEFAULT_DB) -> dict:
         cur.execute("SELECT * FROM ledger_chain ORDER BY chain_index ASC")
         rows = [dict(row) for row in cur.fetchall()]
 
+    if not rows:
+        with _cursor(db_path) as cur:
+            cur.execute("SELECT COUNT(*) AS c FROM inbox_sms")
+            inbox_count = int(cur.fetchone()["c"])
+            cur.execute("SELECT COUNT(*) AS c FROM transactions")
+            tx_count = int(cur.fetchone()["c"])
+        result = {
+            "valid": True,
+            "event_count": 0,
+            "last_event_hash": None,
+            "checked_at_utc": _utc_now_iso(),
+        }
+        if inbox_count > 0 or tx_count > 0:
+            result["note"] = "ledger_chain_empty_with_existing_data"
+            result["recommended_action"] = "python main.py rebuild-ledger"
+            result["inbox_sms_count"] = inbox_count
+            result["transactions_count"] = tx_count
+        return result
+
     prev_hash = ""
     expected_index = 1
     for row in rows:
@@ -1061,6 +1080,156 @@ def verify_ledger_chain(db_path: str = _DEFAULT_DB) -> dict:
         "event_count": len(rows),
         "last_event_hash": prev_hash if rows else None,
         "checked_at_utc": _utc_now_iso(),
+    }
+
+
+def rebuild_ledger_chain(
+    db_path: str = _DEFAULT_DB,
+    force: bool = False,
+) -> dict:
+    """Rebuild ledger_chain from existing inbox/transaction/correction rows."""
+    init_db(db_path)
+    appended = {"inbox_sms_saved": 0, "transaction_saved": 0, "transaction_corrected": 0}
+
+    with _cursor(db_path) as cur:
+        cur.execute("SELECT COUNT(*) AS c FROM ledger_chain")
+        existing_chain_rows = int(cur.fetchone()["c"])
+
+        if existing_chain_rows > 0 and not force:
+            return {
+                "status": "skipped",
+                "reason": "ledger_chain_not_empty",
+                "existing_chain_rows": existing_chain_rows,
+                "hint": "Use --force to rebuild from scratch",
+            }
+
+        if existing_chain_rows > 0 and force:
+            cur.execute("DROP TRIGGER IF EXISTS trg_ledger_chain_block_update")
+            cur.execute("DROP TRIGGER IF EXISTS trg_ledger_chain_block_delete")
+            cur.execute("DELETE FROM ledger_chain")
+            cur.execute(_CREATE_LEDGER_BLOCK_UPDATE_TRIGGER)
+            cur.execute(_CREATE_LEDGER_BLOCK_DELETE_TRIGGER)
+
+        cur.execute(
+            """
+            SELECT id, received_at_utc, source, normalized_hash, parser_version, created_at_utc
+            FROM inbox_sms
+            ORDER BY created_at_utc ASC, id ASC
+            """
+        )
+        inbox_rows = [dict(row) for row in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT id, transaction_id, raw_sms_id, normalized_hash, type, amount, currency,
+                   event_time_utc, parser_version, created_at_utc
+            FROM transactions
+            ORDER BY created_at_utc ASC, id ASC
+            """
+        )
+        tx_rows = [dict(row) for row in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT id, transaction_id, field_name, old_value, new_value,
+                   reason, corrected_by, corrected_at_utc, created_at_utc
+            FROM transaction_corrections
+            ORDER BY created_at_utc ASC, id ASC
+            """
+        )
+        correction_rows = [dict(row) for row in cur.fetchall()]
+
+        replay_events: List[dict] = []
+        for row in inbox_rows:
+            replay_events.append(
+                {
+                    "order": 1,
+                    "created_at_utc": row["created_at_utc"],
+                    "event_type": "inbox_sms_saved",
+                    "entity_table": "inbox_sms",
+                    "entity_pk": str(row["id"]),
+                    "event_time_utc": row.get("received_at_utc"),
+                    "payload": {
+                        "inbox_id": row["id"],
+                        "received_at_utc": row.get("received_at_utc"),
+                        "source": row.get("source"),
+                        "normalized_hash": row.get("normalized_hash"),
+                        "parser_version": row.get("parser_version"),
+                    },
+                }
+            )
+
+        for row in tx_rows:
+            replay_events.append(
+                {
+                    "order": 2,
+                    "created_at_utc": row["created_at_utc"],
+                    "event_type": "transaction_saved",
+                    "entity_table": "transactions",
+                    "entity_pk": str(row["id"]),
+                    "event_time_utc": row.get("event_time_utc"),
+                    "payload": {
+                        "transaction_id": row.get("transaction_id"),
+                        "raw_sms_id": row.get("raw_sms_id"),
+                        "normalized_hash": row.get("normalized_hash"),
+                        "type": row.get("type"),
+                        "amount": row.get("amount"),
+                        "currency": row.get("currency"),
+                        "event_time_utc": row.get("event_time_utc"),
+                        "parser_version": row.get("parser_version"),
+                    },
+                }
+            )
+
+        for row in correction_rows:
+            replay_events.append(
+                {
+                    "order": 3,
+                    "created_at_utc": row["created_at_utc"],
+                    "event_type": "transaction_corrected",
+                    "entity_table": "transactions",
+                    "entity_pk": str(row["transaction_id"]),
+                    "event_time_utc": row.get("corrected_at_utc"),
+                    "payload": {
+                        "transaction_id": row.get("transaction_id"),
+                        "reason": row.get("reason"),
+                        "corrected_by": row.get("corrected_by"),
+                        "changes": {
+                            row.get("field_name"): {
+                                "old": row.get("old_value"),
+                                "new": row.get("new_value"),
+                            }
+                        },
+                    },
+                }
+            )
+
+        replay_events.sort(
+            key=lambda e: (
+                str(e.get("created_at_utc") or ""),
+                int(e.get("order") or 0),
+                str(e.get("entity_pk") or ""),
+            )
+        )
+
+        for event in replay_events:
+            _append_ledger_event_with_cursor(
+                cur=cur,
+                event_type=str(event["event_type"]),
+                entity_table=str(event["entity_table"]),
+                entity_pk=str(event["entity_pk"]),
+                event_time_utc=event.get("event_time_utc"),
+                payload=event["payload"],
+                created_at_utc=event.get("created_at_utc"),
+            )
+            appended[str(event["event_type"])] += 1
+
+    verification = verify_ledger_chain(db_path=db_path)
+    return {
+        "status": "rebuilt",
+        "force": force,
+        "appended": appended,
+        "verification": verification,
     }
 
 

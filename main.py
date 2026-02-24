@@ -168,6 +168,18 @@ def _parse_args():
         help="Optional table filter (e.g. inbox_sms, transactions)",
     )
 
+    # --rebuild-ledger
+    rebuild_ledger_cmd = subparsers.add_parser(
+        "rebuild-ledger",
+        help="Backfill/rebuild tamper-evident ledger chain from existing DB rows",
+    )
+    rebuild_ledger_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+    rebuild_ledger_cmd.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild from scratch even when ledger_chain already has events",
+    )
+
     return parser.parse_args()
 
 
@@ -335,12 +347,26 @@ def main():
         )
         print(json.dumps(rows, indent=2))
 
+    elif args.command == "rebuild-ledger":
+        from pesa_logger.database import rebuild_ledger_chain
+
+        result = rebuild_ledger_chain(
+            db_path=args.db,
+            force=args.force,
+        )
+        print(json.dumps(result, indent=2))
+        if result.get("status") == "skipped":
+            sys.exit(1)
+        verification = result.get("verification") or {}
+        if verification and not verification.get("valid", False):
+            sys.exit(2)
+
     else:
         print(
             "Pesa AI Logger. Run with --help for usage.\n\n"
             "Commands: sms, serve, export-csv, export-excel, insights, anomalies, summary, "
             "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections, "
-            "list-inbox, verify-ledger, ledger-events"
+            "list-inbox, verify-ledger, ledger-events, rebuild-ledger"
         )
 
 

@@ -10,6 +10,7 @@ Use UTC timestamps when adding new entries.
 | 2026-02-23T19:11:49Z | Codex | Phone pilot forwarder module | Added `phone_module/` with a Termux script forwarder, durable local queue/state, retry backoff, boot/start scripts, and tests to support immediate private pilot runs. |
 | 2026-02-23T19:20:00Z | Codex | Status reporting and tree hygiene | Added `docs/PROJECT_STATUS_REPORT.md`, moved non-runtime report build utilities to `dev/tools/`, and tightened doc artifact ignore rules to keep the project tree disciplined. |
 | 2026-02-24T01:58:00Z | Codex | Historical backfill + tamper-evident ledger | Added forwarder backfill paging mode (`--backfill`) with SIM metadata stamping, append-only hash-chain ledger (`ledger_chain`) with verification APIs/CLI, and raw inbox listing endpoints/commands. |
+| 2026-02-24T02:44:00Z | Codex | Ledger chain bootstrap tooling | Added `rebuild-ledger` command to backfill hash-chain events from pre-existing inbox/transaction/correction records and improved verifier hints when chain is empty but data exists. |
 
 ## Phase Checklist
 
@@ -20,3 +21,4 @@ Use UTC timestamps when adding new entries.
 - [x] Phone pilot forwarder module (Termux script)
 - [x] Historical SMS backfill mode (paged import)
 - [x] Tamper-evident hash-chain ledger verification
+- [x] One-time ledger-chain rebuild for historical data

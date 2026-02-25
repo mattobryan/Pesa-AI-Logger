@@ -13,6 +13,7 @@ or via the main entry point:
 
 from __future__ import annotations
 
+import hmac
 import os
 from typing import Optional
 
@@ -103,7 +104,7 @@ def create_app(
         """
         if _api_key:
             provided = request.headers.get("X-API-Key", "")
-            if not provided or provided != _api_key:
+            if not provided or not hmac.compare_digest(provided, _api_key):
                 return jsonify({"error": "Unauthorized"}), 401
 
         if request.is_json:

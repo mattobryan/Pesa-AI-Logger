@@ -28,13 +28,24 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 
-def _load_local_env(path: str = ".env") -> None:
+ALLOWED_DOTENV_KEYS = {
+    "OPENAI_API_KEY",
+    "PESA_API_KEY",
+    "PESA_DB_PATH",
+}
+
+
+def _load_local_env(path: str | None = None) -> None:
     """Load simple KEY=VALUE pairs from a local .env file into os.environ.
 
     Existing environment variables are preserved and not overwritten.
     """
+    if path is None:
+        path = str((Path(__file__).resolve().parent / ".env"))
+
     if not os.path.exists(path):
         return
 
@@ -53,6 +64,8 @@ def _load_local_env(path: str = ".env") -> None:
             key, value = line.split("=", 1)
             key = key.strip()
             if not key:
+                continue
+            if key not in ALLOWED_DOTENV_KEYS:
                 continue
 
             value = value.strip()

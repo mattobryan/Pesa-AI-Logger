@@ -43,29 +43,15 @@ This prints:
 - actual state/log file paths
 - effective endpoint URL
 
-## Private Tailscale mode (recommended)
+## Local-only secure mode
 
-Use tablet/laptop receiver over Tailscale (not public Wi-Fi open port):
-
-1. Start server on receiver:
+For laptop-only operation, keep the receiver local and avoid network exposure:
 
 ```bash
-python main.py serve --host <receiver_tailscale_ip> --port 5000 --api-key "<secret>"
+python main.py serve --port 5000 --api-key "<secret>"
 ```
 
-2. On phone `config.json`:
-   - `"endpoint_url": "http://<receiver_tailscale_ip>:5000/sms"`
-   - `"api_key": "<secret>"`
-
-3. Test:
-
-```bash
-curl -i http://<receiver_tailscale_ip>:5000/health
-python mpesa_forwarder.py --once
-```
-
-Full runbook:
-- `docs/TABLET_TAILSCALE_DEPLOYMENT.md`
+Receiver binds to `127.0.0.1` only. Use direct local ingestion if the phone cannot reach localhost.
 
 ## Run
 

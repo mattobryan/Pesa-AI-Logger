@@ -96,8 +96,10 @@ Output:
 ### 3. Start the webhook server
 
 ```bash
-python main.py serve --host 0.0.0.0 --port 5000 --api-key "your-secret"
+python main.py serve --port 5000 --api-key "your-secret"
 ```
+
+The server binds to `127.0.0.1` (localhost-only).
 
 Send an SMS via HTTP POST:
 ```bash
@@ -230,14 +232,6 @@ python main.py rebuild-ledger
 python scripts/live_pilot.py
 ```
 
-### 18. Deploy receiver on tablet over Tailscale (private)
-
-Runbook:
-
-```bash
-docs/TABLET_TAILSCALE_DEPLOYMENT.md
-```
-
 ---
 
 ## API Endpoints
@@ -314,7 +308,6 @@ phone_module/
 main.py               # CLI entry point
 requirements.txt
 docs/IMPLEMENTATION_LOG.md
-docs/TABLET_TAILSCALE_DEPLOYMENT.md
 dev/README.md
 ```
 

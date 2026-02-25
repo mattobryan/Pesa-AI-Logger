@@ -43,7 +43,6 @@ def _parse_args():
 
     # --serve
     serve_cmd = subparsers.add_parser("serve", help="Start the webhook API server")
-    serve_cmd.add_argument("--host", default="0.0.0.0", help="Bind host/IP")
     serve_cmd.add_argument("--port", type=int, default=5000)
     serve_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
     serve_cmd.add_argument(
@@ -266,8 +265,9 @@ def main():
         if args.api_key:
             os.environ["PESA_API_KEY"] = args.api_key
         app = create_app(db_path=args.db, api_key=args.api_key)
-        print(f"Starting Pesa AI Logger server on {args.host}:{args.port} …")
-        app.run(host=args.host, port=args.port, debug=False)
+        host = "127.0.0.1"
+        print(f"Starting Pesa AI Logger server on {host}:{args.port} …")
+        app.run(host=host, port=args.port, debug=False)
 
     elif args.command == "export-csv":
         from pesa_logger.reports import export_csv

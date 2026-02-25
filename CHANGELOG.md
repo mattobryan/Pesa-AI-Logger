@@ -52,8 +52,7 @@ All notable changes to this project will be documented in this file.
 - SIM-slot extraction in query outputs (`sim_slot`) from stamped source metadata (`sim:<slot>`).
 - Live HTTP smoke-test script: `scripts/live_pilot.py`.
 - Optional API-key auth for ingestion endpoint (`X-API-Key`) via `create_app(..., api_key=...)` / `main.py serve --api-key`.
-- `main.py serve` host binding support via `--host` (useful for binding to Tailscale interface only).
-- Tablet deployment runbook for private Tailscale-only receiver setup: `docs/TABLET_TAILSCALE_DEPLOYMENT.md`.
+- `main.py serve` defaults to localhost-only binding for laptop-first secure operation.
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.
@@ -69,7 +68,7 @@ All notable changes to this project will be documented in this file.
 - `pesa_logger/database.py` now supports SIM-slot filtered inbox/transaction queries using source metadata tokens.
 - `pesa_logger/webhook.py` now exposes failed-inbox classification reporting and SIM-slot query filters.
 - `pesa_logger/webhook.py` now reports `api_key_required` on `/health`.
-- `phone_module/script/README.md` now documents Tailscale private mode and API-key usage.
+- `phone_module/script/README.md` now documents local-only secure mode and API-key usage.
 
 ### Roadmap Checklist
 - [x] Heartbeat + silence alert monitor

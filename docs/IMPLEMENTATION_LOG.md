@@ -13,8 +13,7 @@ Use UTC timestamps when adding new entries.
 | 2026-02-24T02:44:00Z | Codex | Ledger chain bootstrap tooling | Added `rebuild-ledger` command to backfill hash-chain events from pre-existing inbox/transaction/correction records and improved verifier hints when chain is empty but data exists. |
 | 2026-02-24T03:08:00Z | Codex | Parser variant recovery + failed-row replay | Patched parser patterns for `Withdraw Ksh... from ...` and `Ksh <space>amount` balances, added regression tests, and introduced `reparse-failed` command to reprocess previously failed inbox rows. |
 | 2026-02-24T03:40:00Z | Codex | Failed-message forensics + SIM segmentation | Added deterministic failed-message classification reporting (`failed-report`, `/inbox/failed/report`), SIM-slot filtering for inbox/transactions, and regression tests for SIM-aware queries and failed-family grouping. |
-| 2026-02-24T04:08:00Z | Codex | Live pilot harness + ingress hardening | Added `scripts/live_pilot.py` for end-to-end HTTP ingest smoke tests, optional `/sms` API-key enforcement, and `serve --host` binding control for private-network (Tailscale) deployments. |
-| 2026-02-24T04:18:00Z | Codex | Tablet deployment runbook | Added `docs/TABLET_TAILSCALE_DEPLOYMENT.md` with end-to-end private Tailscale deployment steps, receiver hardening, forwarder config, connectivity checks, and ACL template. |
+| 2026-02-24T04:08:00Z | Codex | Live pilot harness + ingress hardening | Added `scripts/live_pilot.py` for end-to-end HTTP ingest smoke tests, optional `/sms` API-key enforcement, and localhost-first receiver defaults for laptop-only operation. |
 
 ## Phase Checklist
 
@@ -31,4 +30,4 @@ Use UTC timestamps when adding new entries.
 - [x] SIM-slot-separated inbox/transaction views
 - [x] Live HTTP pilot smoke test script
 - [x] Optional API-key protection for `/sms`
-- [x] Tailscale tablet deployment runbook
+- [x] Localhost-only receiver lockdown

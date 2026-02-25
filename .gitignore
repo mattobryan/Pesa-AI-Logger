@@ -35,6 +35,11 @@ htmlcov/
 *.swp
 *~
 
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
 # Phone forwarder runtime artifacts
 phone_module/script/runtime/
 phone_module/script/config.json

@@ -26,7 +26,42 @@ Show anomalies::
 
 import argparse
 import json
+import os
 import sys
+
+
+def _load_local_env(path: str = ".env") -> None:
+    """Load simple KEY=VALUE pairs from a local .env file into os.environ.
+
+    Existing environment variables are preserved and not overwritten.
+    """
+    if not os.path.exists(path):
+        return
+
+    with open(path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+
+            if "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if not key:
+                continue
+
+            value = value.strip()
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
+                value = value[1:-1]
+
+            os.environ.setdefault(key, value)
 
 
 def _parse_args():
@@ -40,6 +75,13 @@ def _parse_args():
     sms_cmd = subparsers.add_parser("sms", help="Parse and store a single SMS")
     sms_cmd.add_argument("text", help="Raw M-Pesa SMS text")
     sms_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
+
+    # --init-db
+    init_db_cmd = subparsers.add_parser(
+        "init-db",
+        help="Initialize/verify database schema",
+    )
+    init_db_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
 
     # --serve
     serve_cmd = subparsers.add_parser("serve", help="Start the webhook API server")
@@ -242,9 +284,27 @@ def _parse_args():
 
 
 def main():
+    _load_local_env()
     args = _parse_args()
 
-    if args.command == "sms":
+    if hasattr(args, "db") and args.command is not None:
+        from pesa_logger.database import init_db
+
+        init_db(args.db)
+
+    if args.command == "init-db":
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "message": "Database schema initialized/verified",
+                    "db": args.db,
+                },
+                indent=2,
+            )
+        )
+
+    elif args.command == "sms":
         from pesa_logger.ingestion import ingest_sms_text
 
         result = ingest_sms_text(
@@ -258,13 +318,13 @@ def main():
         print(json.dumps(result, indent=2))
 
     elif args.command == "serve":
-        import os
         from pesa_logger.webhook import create_app
 
         os.environ["PESA_DB_PATH"] = args.db
-        if args.api_key:
-            os.environ["PESA_API_KEY"] = args.api_key
-        app = create_app(db_path=args.db, api_key=args.api_key)
+        effective_api_key = args.api_key or os.environ.get("PESA_API_KEY")
+        if effective_api_key:
+            os.environ["PESA_API_KEY"] = effective_api_key
+        app = create_app(db_path=args.db, api_key=effective_api_key)
         host = "127.0.0.1"
         print(f"Starting Pesa AI Logger server on {host}:{args.port} …")
         app.run(host=host, port=args.port, debug=False)
@@ -459,7 +519,7 @@ def main():
     else:
         print(
             "Pesa AI Logger. Run with --help for usage.\n\n"
-            "Commands: sms, serve, export-csv, export-excel, insights, anomalies, summary, "
+            "Commands: init-db, sms, serve, export-csv, export-excel, insights, anomalies, summary, "
             "heartbeat, backup, scheduler-once, validate-corpus, correct, list-corrections, "
             "list-inbox, list-transactions, reparse-failed, verify-ledger, "
             "ledger-events, rebuild-ledger, failed-report"

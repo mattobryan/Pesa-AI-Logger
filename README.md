@@ -95,8 +95,22 @@ Output:
 
 ### 3. Start the webhook server
 
+Optional local secret setup (recommended):
+
+```bash
+copy .env.example .env
+```
+
+Edit `.env` and set `PESA_API_KEY=...`.
+
 ```bash
 python main.py serve --port 5000 --api-key "your-secret"
+```
+
+Or, when `PESA_API_KEY` is set in `.env`, start without passing the key each time:
+
+```bash
+python main.py serve --port 5000
 ```
 
 The server binds to `127.0.0.1` (localhost-only).

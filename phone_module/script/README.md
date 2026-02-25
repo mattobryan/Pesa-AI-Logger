@@ -43,6 +43,14 @@ This prints:
 - actual state/log file paths
 - effective endpoint URL
 
+Quick sanity checks:
+
+```bash
+termux-sms-list -l 1
+python mpesa_forwarder.py --once --dry-run
+tail -n 50 runtime/forwarder.log
+```
+
 ## Local-only secure mode
 
 For laptop-only operation, keep the receiver local and avoid network exposure:
@@ -88,3 +96,25 @@ Files created:
 
 Use `Termux:Boot` and place a boot script under `~/.termux/boot/`.
 See `boot/start_forwarder.sh` in this folder.
+
+Suggested setup:
+
+```bash
+mkdir -p ~/.termux/boot
+cp boot/start_forwarder.sh ~/.termux/boot/start_forwarder.sh
+chmod +x ~/.termux/boot/start_forwarder.sh start.sh run_once.sh
+```
+
+If your forwarder folder is not `~/mpesa-forwarder` or `~/Pesa-AI-Logger/phone_module/script`,
+set path explicitly in `~/.termux/boot/start_forwarder.sh`:
+
+```bash
+export FORWARDER_DIR="$HOME/your/path/to/phone_module/script"
+```
+
+After reboot, verify boot startup:
+
+```bash
+tail -n 100 runtime/boot.log
+python mpesa_forwarder.py --print-config
+```

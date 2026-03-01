@@ -8,5 +8,9 @@ services:
         value: /tmp/pesa_logger.db
       - key: PESA_API_KEY
         generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
     healthCheckPath: /health
     autoDeploy: true

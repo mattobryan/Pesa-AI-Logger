@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - Phone pilot module at `phone_module/` with:
   - Termux forwarder script (`phone_module/script/mpesa_forwarder.py`)
   - example config, boot/start scripts, and runtime state queue
-  - initial future APK placeholder (`phone_module/app/README.md`)
+  - archived Android app-track folder (`phone_module/app/README.md`)
 - Consolidated status report: `docs/PROJECT_STATUS_REPORT.md`.
 - Tamper-evident append-only ledger chain table `ledger_chain` with hash continuity verification.
 - New API endpoints:
@@ -53,6 +53,9 @@ All notable changes to this project will be documented in this file.
 - Live HTTP smoke-test script: `scripts/live_pilot.py`.
 - Optional API-key auth for ingestion endpoint (`X-API-Key`) via `create_app(..., api_key=...)` / `main.py serve --api-key`.
 - `main.py serve` defaults to localhost-only binding for laptop-first secure operation.
+- Authenticated diagnostics endpoint `GET /health/details` (API key or dashboard session when auth is enabled).
+- Live route inventory endpoint `GET /routes` for runtime route/method/auth metadata.
+- End-to-end dashboard/session-aware auth guards across data APIs (`/transactions`, `/inbox`, analytics, ledger, corrections, monitoring, export).
 
 ### Changed
 - `pesa_logger/database.py` migrated to canonical ledger schema and strict idempotency rules.
@@ -67,8 +70,15 @@ All notable changes to this project will be documented in this file.
 - `phone_module/script/mpesa_forwarder.py` now supports paged historical backfill and SIM slot capture.
 - `pesa_logger/database.py` now supports SIM-slot filtered inbox/transaction queries using source metadata tokens.
 - `pesa_logger/webhook.py` now exposes failed-inbox classification reporting and SIM-slot query filters.
-- `pesa_logger/webhook.py` now reports `api_key_required` on `/health`.
+- `pesa_logger/webhook.py` now reports `api_key_required` on `/health/details`.
 - `phone_module/script/README.md` now documents local-only secure mode and API-key usage.
+- `pesa_logger/webhook.py` now uses non-static session secrets and hardened session-cookie defaults.
+- `pesa_logger/dashboard.py` now escapes dynamic HTML content before DOM insertion to reduce XSS risk.
+- `GET /health` now returns minimal public status, with detailed diagnostics moved to `GET /health/details`.
+- Dashboard API reference now renders live route data from `GET /routes` instead of static route text.
+- `main.py serve` now supports explicit `--host` and defaults to loopback (`127.0.0.1`) unless overridden.
+- Root `runtime/` logs are now ignored in `.gitignore` to prevent accidental commits.
+- Project direction is now Termux-only for phone forwarding; Android app track is archived/inactive.
 
 ### Roadmap Checklist
 - [x] Heartbeat + silence alert monitor

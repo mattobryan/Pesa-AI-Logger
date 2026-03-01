@@ -43,6 +43,7 @@ htmlcov/
 # Phone forwarder runtime artifacts
 phone_module/script/runtime/
 phone_module/script/config.json
+runtime/
 
 # Generated documentation build artifacts
 docs/*.aux

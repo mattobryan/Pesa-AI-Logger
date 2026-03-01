@@ -2,6 +2,8 @@
 
 This is the fastest private-use path to forward M-Pesa SMS to your local ledger.
 
+Note: Android app track is archived; this Termux script path is the active phone module.
+
 ## What it does
 
 - Polls SMS inbox with `termux-sms-list`
@@ -50,6 +52,40 @@ termux-sms-list -l 1
 python mpesa_forwarder.py --once --dry-run
 tail -n 50 runtime/forwarder.log
 ```
+
+## Pull only phone files from Git (recommended)
+
+Use sparse checkout so Termux downloads only `phone_module/script` instead of the whole repo.
+
+1. Install required packages:
+
+```bash
+pkg update && pkg upgrade -y
+pkg install -y git python termux-api
+```
+
+2. Clone repo metadata + checkout only script path:
+
+```bash
+git clone --filter=blob:none --no-checkout <REPO_URL> "$HOME/Pesa-AI-Logger"
+cd "$HOME/Pesa-AI-Logger"
+git sparse-checkout init --cone
+git sparse-checkout set phone_module/script
+git checkout main
+cd phone_module/script
+chmod +x bootstrap_sparse_checkout.sh update_sparse_checkout.sh start.sh run_once.sh
+python mpesa_forwarder.py --init-config
+```
+
+3. Future updates (from inside `phone_module/script`):
+
+```bash
+./update_sparse_checkout.sh main
+```
+
+Only this path is kept in working tree:
+
+- `phone_module/script/`
 
 ## Local-only secure mode
 
@@ -102,7 +138,7 @@ Suggested setup:
 ```bash
 mkdir -p ~/.termux/boot
 cp boot/start_forwarder.sh ~/.termux/boot/start_forwarder.sh
-chmod +x ~/.termux/boot/start_forwarder.sh start.sh run_once.sh
+chmod +x ~/.termux/boot/start_forwarder.sh start.sh run_once.sh bootstrap_sparse_checkout.sh update_sparse_checkout.sh
 ```
 
 If your forwarder folder is not `~/mpesa-forwarder` or `~/Pesa-AI-Logger/phone_module/script`,

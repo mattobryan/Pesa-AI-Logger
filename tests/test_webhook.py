@@ -46,14 +46,27 @@ class TestHealth:
         resp = client.get("/health")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data["status"] == "ok"
-        assert data["api_key_required"] is False
+        assert data == {"status": "ok"}
 
-    def test_health_reports_api_key_requirement(self, client_with_api_key):
-        resp = client_with_api_key.get("/health")
+    def test_health_details_reports_api_key_requirement(self, client_with_api_key):
+        unauth = client_with_api_key.get("/health/details")
+        assert unauth.status_code == 401
+
+        resp = client_with_api_key.get(
+            "/health/details",
+            headers={"X-API-Key": "secret123"},
+        )
         assert resp.status_code == 200
         data = json.loads(resp.data)
+        assert data["status"] == "ok"
         assert data["api_key_required"] is True
+
+    def test_routes_inventory_is_available_without_api_key(self, client):
+        resp = client.get("/routes")
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert isinstance(rows, list)
+        assert any(row.get("path") == "/health" for row in rows)
 
 
 class TestIngestSms:
@@ -154,6 +167,75 @@ class TestIngestSms:
             headers={"X-API-Key": "secret123"},
         )
         assert ok.status_code == 201
+
+    def test_ingest_allows_authenticated_session(self, client_with_api_key):
+        login = client_with_api_key.post(
+            "/auth",
+            data=json.dumps({"key": "secret123"}),
+            content_type="application/json",
+        )
+        assert login.status_code == 200
+
+        resp = client_with_api_key.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+
+
+class TestAuthGuards:
+    @pytest.mark.parametrize(
+        "method,path",
+        [
+            ("get", "/monitor/heartbeat"),
+            ("get", "/monitor/heartbeat/history"),
+            ("get", "/transactions"),
+            ("get", "/inbox"),
+            ("get", "/inbox/failed/report"),
+            ("get", "/analytics/insights"),
+            ("get", "/analytics/summary/weekly"),
+            ("get", "/analytics/summary/monthly"),
+            ("get", "/analytics/anomalies"),
+            ("get", "/export/csv"),
+            ("get", "/corrections"),
+            ("get", "/ledger/verify"),
+            ("get", "/ledger/events"),
+            ("get", "/routes"),
+        ],
+    )
+    def test_protected_endpoints_require_auth_when_api_key_enabled(
+        self,
+        client_with_api_key,
+        method,
+        path,
+    ):
+        resp = getattr(client_with_api_key, method)(path)
+        assert resp.status_code == 401
+
+    def test_authenticated_session_can_access_protected_endpoints(self, client_with_api_key):
+        login = client_with_api_key.post(
+            "/auth",
+            data=json.dumps({"key": "secret123"}),
+            content_type="application/json",
+        )
+        assert login.status_code == 200
+
+        resp = client_with_api_key.get("/transactions")
+        assert resp.status_code == 200
+
+    def test_routes_inventory_returns_live_route_data(self, client_with_api_key):
+        resp = client_with_api_key.get(
+            "/routes",
+            headers={"X-API-Key": "secret123"},
+        )
+        assert resp.status_code == 200
+        rows = json.loads(resp.data)
+        assert isinstance(rows, list)
+        assert any(row.get("path") == "/sms" for row in rows)
+        route = next(row for row in rows if row.get("path") == "/sms")
+        assert "POST" in route.get("methods", [])
+        assert route.get("requires_auth") is True
 
 
 class TestListTransactions:

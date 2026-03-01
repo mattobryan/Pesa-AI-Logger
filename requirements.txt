@@ -1,9 +1,13 @@
 # Core
 flask>=2.3,<4.0
 tzdata>=2024.1
+gunicorn>=21.2,<23.0
 
-# Excel export (optional but recommended)
+# Excel export
 openpyxl>=3.1,<4.0
+
+# Production logging
+python-json-logger>=2.0,<3.0
 
 # Optional AI analytics
 # openai>=1.0

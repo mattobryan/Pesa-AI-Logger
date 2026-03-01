@@ -1,4 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Pesa Forwarder</string>
+    <string name="hero_title">Pesa Relay Console</string>
+    <string name="hero_subtitle">Securely route M-Pesa messages into your ledger with one-tap checks and live delivery status.</string>
+    <string name="hero_chip_text">LOCAL MODE ACTIVE</string>
+
+    <string name="config_title">Connection Setup</string>
+    <string name="config_subtitle">Save endpoint, source label, and optional API key before sending tests.</string>
+    <string name="webhook_hint_label">Webhook URL</string>
+    <string name="webhook_hint_value">http://&lt;laptop-ip&gt;:5000/sms</string>
+    <string name="api_key_hint_label">API Key (optional)</string>
+    <string name="api_key_hint_value">X-API-Key value</string>
+    <string name="source_hint_label">Source Label</string>
+    <string name="source_hint_value">android-app</string>
+
+    <string name="action_title">Actions</string>
+    <string name="action_subtitle">Run a live health check, then fire a test SMS payload to verify ingestion.</string>
+
+    <string name="button_save">Save Settings</string>
+    <string name="button_check_health">Check Health</string>
+    <string name="button_send_test">Send Test Payload</string>
+    <string name="button_clear_status">Clear Status</string>
+
+    <string name="action_send_test_label">Send test payload</string>
+    <string name="action_health_label">Health check</string>
+
+    <string name="status_idle">Ready. No action running.</string>
+    <string name="status_saved">Settings saved locally.</string>
+    <string name="status_running">Running %1$s…</string>
+    <string name="status_success">Success: %1$s complete. %2$s</string>
+    <string name="status_failed">Failed: %1$s. %2$s</string>
+    <string name="status_meta_idle">Last action: none</string>
+    <string name="status_meta_saved_prefix">Saved at</string>
+    <string name="status_meta_success_prefix">Completed at</string>
+    <string name="status_meta_failed_prefix">Failed at</string>
+    <string name="status_meta_format">%1$s %2$s</string>
+
+    <string name="toast_saved">Settings saved</string>
+    <string name="error_unknown">Unknown error</string>
 </resources>

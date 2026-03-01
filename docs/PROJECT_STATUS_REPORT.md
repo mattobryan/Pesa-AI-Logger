@@ -74,7 +74,7 @@ Test status is green: `120 passed`.
   - local queue + retry backoff
   - persisted state/log files
   - boot/start helper scripts
-- App track placeholder: `phone_module/app/README.md`
+- App track archived (inactive): `phone_module/app/README.md`
 
 ## 3. API and CLI Scope
 
@@ -83,6 +83,8 @@ Test status is green: `120 passed`.
 Active endpoints include:
 
 - `/health`
+- `/health/details`
+- `/routes`
 - `/sms`
 - `/transactions`
 - `/analytics/insights`
@@ -126,7 +128,7 @@ Current automated verification:
 
 - Real-world pilot telemetry has not yet been summarized over multiple days.
 - Parser corpus exists and passes, but can still be expanded with more real-world edge formats.
-- APK track is planned but not implemented yet (placeholder only).
+- Android app track is archived; phone ingestion is Termux-script only.
 
 ## 6. Risks Remaining
 
@@ -143,8 +145,8 @@ Current automated verification:
    - duplicate rate
    - heartbeat alerts
 3. Expand corpus from pilot failures and rerun validation gate.
-4. Begin minimal APK scaffold under `phone_module/app/` while keeping script pilot active.
+4. Harden boot reliability and observability for the Termux script path (`phone_module/script/`).
 
 ## 8. Conclusion
 
-The trusted-ledger foundation is in place and stable. The project has moved from design into an operationally testable system with strong correctness controls. The current priority is real pilot evidence collection while the APK track is prepared in parallel.
+The trusted-ledger foundation is in place and stable. The project has moved from design into an operationally testable system with strong correctness controls. The current priority is real pilot evidence collection through the Termux script path.

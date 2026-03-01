@@ -1,9 +1,26 @@
 package com.pesa.forwarder
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
 class ConfigStore(context: Context) {
-    private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    private val prefs = run {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                PREF_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        } catch (_: Exception) {
+            context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        }
+    }
 
     fun load(): AppConfig {
         return AppConfig(
@@ -27,7 +44,7 @@ class ConfigStore(context: Context) {
         private const val KEY_API_KEY = "api_key"
         private const val KEY_SOURCE = "source"
 
-        private const val DEFAULT_WEBHOOK_URL = "http://100.123.95.105:5000/sms"
+        private const val DEFAULT_WEBHOOK_URL = ""
         private const val DEFAULT_SOURCE = "android-app"
     }
 }

@@ -99,6 +99,11 @@ def _parse_args():
     # --serve
     serve_cmd = subparsers.add_parser("serve", help="Start the webhook API server")
     serve_cmd.add_argument("--port", type=int, default=5000)
+    serve_cmd.add_argument(
+        "--host",
+        default=os.environ.get("PESA_BIND_HOST", "127.0.0.1"),
+        help="Bind host (default: 127.0.0.1; use 0.0.0.0 for LAN/Tailscale access)",
+    )
     serve_cmd.add_argument("--db", default="pesa_logger.db", help="Database path")
     serve_cmd.add_argument(
         "--api-key",
@@ -338,7 +343,7 @@ def main():
         if effective_api_key:
             os.environ["PESA_API_KEY"] = effective_api_key
         app = create_app(db_path=args.db, api_key=effective_api_key)
-        host = "127.0.0.1"
+        host = (args.host or "127.0.0.1").strip()
         print(f"Starting Pesa AI Logger server on {host}:{args.port} …")
         app.run(host=host, port=args.port, debug=False)
 

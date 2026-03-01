@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pesa_primary">#0B7E67</color>
+    <color name="pesa_primary_dark">#055747</color>
+    <color name="pesa_secondary">#E7902F</color>
+    <color name="pesa_bg_top">#F1FAF6</color>
+    <color name="pesa_bg_bottom">#E8F2EE</color>
+    <color name="pesa_surface">#FFFFFFFF</color>
+    <color name="pesa_outline">#C7DDD5</color>
+    <color name="pesa_text_primary">#132D27</color>
+    <color name="pesa_text_secondary">#4D6761</color>
+    <color name="pesa_on_primary">#FFFFFF</color>
+    <color name="pesa_on_primary_soft">#D9F5EC</color>
+
+    <color name="status_neutral">#425A54</color>
+    <color name="status_success">#116149</color>
+    <color name="status_error">#B3261E</color>
+</resources>

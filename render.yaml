@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: pesa-ai-logger
+    runtime: docker
+    plan: free
+    envVars:
+      - key: PESA_DB_PATH
+        value: /tmp/pesa_logger.db
+      - key: PESA_API_KEY
+        generateValue: true
+    healthCheckPath: /health
+    autoDeploy: true

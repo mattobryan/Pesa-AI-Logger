@@ -9,7 +9,7 @@ The system captures M-Pesa SMS notifications, parses them through a Python backe
 ## Architecture
 
 ```
-Android Phone (SMS Forwarder)
+Android Phone (Termux SMS Forwarder)
         ↓
 Forwarded SMS (Webhook / HTTP POST)
         ↓
@@ -250,9 +250,15 @@ python scripts/live_pilot.py
 
 ## API Endpoints
 
+When `PESA_API_KEY` is configured, all data/analytics/ledger/export routes require either:
+- `X-API-Key` header, or
+- an authenticated dashboard session.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
+| `GET` | `/health/details` | Detailed health diagnostics (auth) |
+| `GET` | `/routes` | Live route inventory for dashboard/API clients (auth) |
 | `POST` | `/sms` | Ingest a raw M-Pesa SMS (requires `X-API-Key` when configured) |
 | `GET` | `/transactions` | List stored transactions (`type`, `category`, `sim_slot`, `limit`) |
 | `GET` | `/analytics/insights` | AI-generated insights |
@@ -317,8 +323,8 @@ scripts/
 corpus/
 └── mpesa_sms_corpus.jsonl
 phone_module/
-├── app/
-└── script/
+├── script/            # Active phone path (Termux)
+└── app/               # Archived (inactive)
 main.py               # CLI entry point
 requirements.txt
 docs/IMPLEMENTATION_LOG.md
@@ -353,4 +359,3 @@ pytest tests/ -v
 ## Tags
 
 `python` · `fintech` · `mpesa` · `sms-parser` · `automation` · `personal-finance` · `sqlite` · `data-logging` · `ai-agent` · `kenya-tech`
-

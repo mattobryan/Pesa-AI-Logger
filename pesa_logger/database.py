@@ -40,8 +40,10 @@ def _get_connection(db_path: str) -> sqlite3.Connection:
         conn = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")   # safe with WAL, better performance
+        conn.execute("PRAGMA busy_timeout=5000")    # wait up to 5s before "db locked" error
         conn.execute("PRAGMA foreign_keys=ON")
-        _local.connections[db_path] = conn
+        _local.connections[db_path] = conn  
     return _local.connections[db_path]
 
 

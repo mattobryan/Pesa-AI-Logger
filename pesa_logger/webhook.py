@@ -1,16 +1,4 @@
-"""Webhook / API ingestion layer.
-
-Exposes a lightweight Flask application that:
-* Accepts raw M-Pesa SMS text via HTTP POST
-* Parses, categorises, and persists each transaction
-* Returns JSON responses
-
-Run with:
-    python -m pesa_logger.webhook
-or via the main entry point:
-    python main.py --serve
-"""
-
+"""Webhook / API ingestion layer."""
 from __future__ import annotations
 
 import hmac
@@ -36,23 +24,29 @@ from pesa_logger.dashboard import (
     build_logout_response,
 )
 
+# Maximum size of an incoming request body (2 KB is generous for any SMS)
+_MAX_SMS_BYTES = 2 * 1024
+# Maximum length of the SMS text string itself
+_MAX_SMS_TEXT_LEN = 1200
+
 
 def create_app(
     db_path: Optional[str] = None,
     api_key: Optional[str] = None,
-) -> "Flask":  # type: ignore[name-defined]
+) -> "Flask":
     """Create and configure the Flask application."""
     try:
         from flask import Flask, jsonify, request, session
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise ImportError(
-            "Flask is required for the webhook server. "
-            "Install it with: pip install flask"
+            "Flask is required. Install it with: pip install flask"
         ) from exc
 
     app = Flask(__name__)
 
-    # Use a strong random secret when SESSION_SECRET is not explicitly set.
+    # Reject any request body larger than 2 KB — protects the SMS parser
+    app.config["MAX_CONTENT_LENGTH"] = _MAX_SMS_BYTES
+
     session_secret = os.environ.get("SESSION_SECRET")
     if not session_secret:
         session_secret = secrets.token_urlsafe(48)
@@ -70,6 +64,18 @@ def create_app(
     ).strip()
 
     init_db(_db)
+
+    # -------------------------------------------------------------------------
+    # Error handlers
+    # -------------------------------------------------------------------------
+
+    @app.errorhandler(413)
+    def request_too_large(e):
+        return jsonify({"error": "Request body too large. Maximum SMS payload is 2 KB."}), 413
+
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
 
     def _compose_source(base_source: str, meta: Optional[dict]) -> str:
         if not isinstance(meta, dict):
@@ -101,12 +107,8 @@ def create_app(
             return None
         return jsonify({"error": "Unauthorized"}), 401
 
-    _public_paths = {
-        "/health",
-        "/dashboard",
-        "/auth",
-        "/logout",
-    }
+    _public_paths = {"/health", "/dashboard", "/auth", "/logout"}
+
     _route_descriptions = {
         "/health": "Public health status",
         "/health/details": "Detailed health diagnostics",
@@ -128,31 +130,28 @@ def create_app(
         "/corrections": "Correction audit + mutation",
         "/ledger/verify": "Ledger-chain verification",
         "/ledger/events": "Ledger event listing",
+        "/analytics/full": "Complete analytics report for dashboard",
+        "/analytics/health": "Financial health score",
+        "/analytics/forecast": "30-day spending forecast",
+        "/analytics/counterparties": "Counterparty profiles and risk flags",
     }
 
     # -------------------------------------------------------------------------
-    # Dashboard — login gate + single-page SPA (all logic in dashboard.py)
+    # Dashboard
     # -------------------------------------------------------------------------
 
     @app.route("/dashboard", methods=["GET"])
     def dashboard():
-        """Render the secure SPA dashboard — gate logic lives in dashboard.py."""
         error = request.args.get("error") == "1"
-        return build_dashboard_response(
-            api_key=_api_key,
-            session=session,
-            error=error,
-        )
+        return build_dashboard_response(api_key=_api_key, session=session, error=error)
 
     @app.route("/auth", methods=["POST"])
     def auth():
-        """Validate API key and establish an authenticated session."""
         body, code = build_auth_response(request, _api_key, session)
         return jsonify(body), code
 
     @app.route("/logout", methods=["GET"])
     def logout():
-        """Clear the session and redirect to login."""
         body, code = build_logout_response(session)
         return jsonify(body), code
 
@@ -169,34 +168,25 @@ def create_app(
         auth_error = _require_auth()
         if auth_error:
             return auth_error
-        return jsonify(
-            {
-                "status": "ok",
-                "db": _db,
-                "api_key_required": bool(_api_key),
-            }
-        )
+        return jsonify({"status": "ok", "db": _db, "api_key_required": bool(_api_key)})
 
     @app.route("/routes", methods=["GET"])
     def routes_inventory():
         auth_error = _require_auth()
         if auth_error:
             return auth_error
-
         rows = []
         for rule in sorted(app.url_map.iter_rules(), key=lambda item: item.rule):
             if rule.endpoint == "static":
                 continue
             methods = sorted(m for m in rule.methods if m not in {"HEAD", "OPTIONS"})
-            rows.append(
-                {
-                    "path": rule.rule,
-                    "methods": methods,
-                    "endpoint": rule.endpoint,
-                    "requires_auth": rule.rule not in _public_paths,
-                    "description": _route_descriptions.get(rule.rule, ""),
-                }
-            )
+            rows.append({
+                "path": rule.rule,
+                "methods": methods,
+                "endpoint": rule.endpoint,
+                "requires_auth": rule.rule not in _public_paths,
+                "description": _route_descriptions.get(rule.rule, ""),
+            })
         return jsonify(rows)
 
     # -------------------------------------------------------------------------
@@ -210,11 +200,7 @@ def create_app(
             return auth_error
         threshold = float(request.args.get("threshold_hours", 24))
         record = request.args.get("record", "1").lower() not in {"0", "false", "no"}
-        result = heartbeat_status(
-            db_path=_db,
-            threshold_hours=threshold,
-            record=record,
-        )
+        result = heartbeat_status(db_path=_db, threshold_hours=threshold, record=record)
         code = 200 if result["status"] == "ok" else 503
         return jsonify(result), code
 
@@ -233,32 +219,29 @@ def create_app(
 
     @app.route("/sms", methods=["POST"])
     def ingest_sms():
-        """Accept a raw SMS and process it.
-
-        Expected JSON body::
-
-            {"sms": "<raw M-Pesa SMS text>"}
-
-        Alternatively, the raw SMS text may be sent as plain text.
-        """
         auth_error = _require_auth()
         if auth_error:
             return auth_error
 
         if request.is_json:
             body = request.get_json(silent=True) or {}
-            sms_text = body.get("sms", "")
+            sms_text = str(body.get("sms") or "").strip()
             source = body.get("source") or request.headers.get("X-SMS-Source", "webhook")
             source = _compose_source(source, body.get("meta"))
             meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
             fallback_event_time_utc = meta.get("sms_timestamp_utc")
         else:
-            sms_text = request.get_data(as_text=True)
+            sms_text = (request.get_data(as_text=True) or "").strip()
             source = request.headers.get("X-SMS-Source", "webhook")
             fallback_event_time_utc = None
 
         if not sms_text:
             return jsonify({"error": "No SMS text provided"}), 400
+
+        if len(sms_text) > _MAX_SMS_TEXT_LEN:
+            return jsonify({
+                "error": f"SMS text too long ({len(sms_text)} chars). Maximum is {_MAX_SMS_TEXT_LEN}."
+            }), 422
 
         result = ingest_sms_text(
             sms_text=sms_text,
@@ -266,6 +249,7 @@ def create_app(
             source=source,
             fallback_event_time_utc=fallback_event_time_utc,
         )
+
         if result["status"] == "saved":
             return jsonify(result), 201
         if result["status"] == "duplicate":
@@ -303,10 +287,7 @@ def create_app(
         sample_size = int(request.args.get("sample_size", 3))
         sim_slot = request.args.get("sim_slot")
         result = build_failed_report(
-            db_path=_db,
-            limit=limit,
-            sample_size=sample_size,
-            sim_slot=sim_slot or None,
+            db_path=_db, limit=limit, sample_size=sample_size, sim_slot=sim_slot or None
         )
         return jsonify(result)
 
@@ -316,17 +297,14 @@ def create_app(
 
     @app.route("/transactions", methods=["GET"])
     def list_all():
-        """Return all stored transactions as JSON."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from pesa_logger.database import list_transactions
-
         tx_type = request.args.get("type")
         category = request.args.get("category")
         sim_slot = request.args.get("sim_slot")
         limit = int(request.args.get("limit", 100))
-
         rows = list_transactions(
             db_path=_db,
             tx_type=tx_type or None,
@@ -342,49 +320,39 @@ def create_app(
 
     @app.route("/analytics/insights", methods=["GET"])
     def insights():
-        """Return AI-generated financial insights."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from pesa_logger.analytics import generate_insights
-
         days = int(request.args.get("days", 30))
-        result = generate_insights(db_path=_db, days=days)
-        return jsonify({"insights": result})
+        return jsonify({"insights": generate_insights(db_path=_db, days=days)})
 
     @app.route("/analytics/summary/weekly", methods=["GET"])
     def weekly():
-        """Return weekly financial summary."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from pesa_logger.reports import weekly_summary
-
         weeks = int(request.args.get("weeks", 4))
         return jsonify(weekly_summary(db_path=_db, weeks=weeks))
 
     @app.route("/analytics/summary/monthly", methods=["GET"])
     def monthly():
-        """Return monthly financial summary."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from pesa_logger.reports import monthly_summary
-
         months = int(request.args.get("months", 6))
         return jsonify(monthly_summary(db_path=_db, months=months))
 
     @app.route("/analytics/anomalies", methods=["GET"])
     def anomalies():
-        """Return detected anomalies."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from pesa_logger.anomaly import detect_anomalies
-
         lookback = int(request.args.get("days", 90))
-        result = detect_anomalies(db_path=_db, lookback_days=lookback)
-        return jsonify([a.to_dict() for a in result])
+        return jsonify([a.to_dict() for a in detect_anomalies(db_path=_db, lookback_days=lookback)])
 
     # -------------------------------------------------------------------------
     # Export
@@ -392,13 +360,11 @@ def create_app(
 
     @app.route("/export/csv", methods=["GET"])
     def export_csv_route():
-        """Stream a CSV export of all transactions."""
         auth_error = _require_auth()
         if auth_error:
             return auth_error
         from flask import Response
         from pesa_logger.reports import export_csv
-
         content = export_csv(db_path=_db)
         return Response(
             content,
@@ -417,11 +383,7 @@ def create_app(
             return auth_error
         tx_id = request.args.get("transaction_id")
         limit = int(request.args.get("limit", 200))
-        rows = list_transaction_corrections(
-            db_path=_db,
-            transaction_id=tx_id or None,
-            limit=limit,
-        )
+        rows = list_transaction_corrections(db_path=_db, transaction_id=tx_id or None, limit=limit)
         return jsonify(rows)
 
     @app.route("/corrections", methods=["POST"])
@@ -434,14 +396,12 @@ def create_app(
         updates = body.get("updates") or {}
         reason = body.get("reason", "")
         corrected_by = body.get("corrected_by", "api")
-
         if not transaction_id:
             return jsonify({"error": "transaction_id is required"}), 400
         if not isinstance(updates, dict) or not updates:
             return jsonify({"error": "updates must be a non-empty object"}), 400
         if not reason:
             return jsonify({"error": "reason is required"}), 400
-
         try:
             result = apply_transaction_correction(
                 transaction_id=transaction_id,
@@ -452,7 +412,6 @@ def create_app(
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-
         return jsonify(result), 200
 
     # -------------------------------------------------------------------------
@@ -465,8 +424,7 @@ def create_app(
         if auth_error:
             return auth_error
         result = verify_ledger_chain(db_path=_db)
-        code = 200 if result.get("valid") else 409
-        return jsonify(result), code
+        return jsonify(result), (200 if result.get("valid") else 409)
 
     @app.route("/ledger/events", methods=["GET"])
     def ledger_events():
@@ -475,13 +433,98 @@ def create_app(
             return auth_error
         limit = int(request.args.get("limit", 200))
         entity_table = request.args.get("entity_table")
-        rows = list_ledger_events(
-            db_path=_db,
-            limit=limit,
-            entity_table=entity_table or None,
-        )
+        rows = list_ledger_events(db_path=_db, limit=limit, entity_table=entity_table or None)
         return jsonify(rows)
+    # -------------------------------------------------------------------------
+    # Analytics — full report endpoint
+    # -------------------------------------------------------------------------
 
+    @app.route("/analytics/full", methods=["GET"])
+    def analytics_full():
+        """Return a complete analytics report — powers the analytics dashboard.
+
+        Query params:
+            days          : lookback period in days (default 30)
+            include_forecast    : 1/0 (default 1)
+            include_health      : 1/0 (default 1)
+        """
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.analytics import generate_full_report, report_to_dict
+        from dataclasses import asdict
+
+        days = max(1, min(365, int(request.args.get("days", 30))))
+        include_forecast = request.args.get("include_forecast", "1").lower() not in {"0", "false"}
+        include_health = request.args.get("include_health", "1").lower() not in {"0", "false"}
+
+        try:
+            report = generate_full_report(
+                db_path=_db,
+                days=days,
+                include_forecast=include_forecast,
+                include_health_score=include_health,
+            )
+            return jsonify(report_to_dict(report)), 200
+
+        except Exception as exc:
+            return jsonify({
+                "error": "Failed to generate analytics report",
+                "detail": str(exc),
+            }), 500
+
+    @app.route("/analytics/health", methods=["GET"])
+    def analytics_health_score():
+        """Return financial health score only — lightweight endpoint."""
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.analytics import financial_health_score
+        from dataclasses import asdict
+
+        days = max(1, min(365, int(request.args.get("days", 30))))
+        try:
+            score = financial_health_score(db_path=_db, days=days)
+            return jsonify(asdict(score)), 200
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/analytics/forecast", methods=["GET"])
+    def analytics_forecast():
+        """Return spending forecast only."""
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.analytics import spending_forecast
+        from dataclasses import asdict
+
+        try:
+            forecast = spending_forecast(db_path=_db)
+            return jsonify(asdict(forecast)), 200
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/analytics/counterparties", methods=["GET"])
+    def analytics_counterparties():
+        """Return counterparty profiles."""
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.analytics import frequent_counterparties
+        from dataclasses import asdict
+
+        days = int(request.args.get("days", 90))
+        limit = int(request.args.get("limit", 10))
+
+        try:
+            profiles = frequent_counterparties(db_path=_db, days=days, limit=limit)
+            return jsonify([asdict(p) for p in profiles]), 200
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
     return app
 
 

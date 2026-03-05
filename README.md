@@ -113,7 +113,8 @@ Or, when `PESA_API_KEY` is set in `.env`, start without passing the key each tim
 python main.py serve --port 5000
 ```
 
-The server binds to `127.0.0.1` (localhost-only).
+The server binds to `127.0.0.1` by default.
+Use `--host 0.0.0.0` when you intentionally need LAN/Tailscale/device access.
 
 Send an SMS via HTTP POST:
 ```bash
@@ -257,6 +258,9 @@ When `PESA_API_KEY` is configured, all data/analytics/ledger/export routes requi
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
+| `GET` | `/dashboard` | Dashboard login/app shell (session-based) |
+| `POST` | `/auth` | Dashboard login (API key -> session) |
+| `GET` | `/logout` | Dashboard logout (clears session) |
 | `GET` | `/health/details` | Detailed health diagnostics (auth) |
 | `GET` | `/routes` | Live route inventory for dashboard/API clients (auth) |
 | `POST` | `/sms` | Ingest a raw M-Pesa SMS (requires `X-API-Key` when configured) |

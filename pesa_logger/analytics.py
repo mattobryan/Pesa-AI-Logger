@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import json
 import statistics
-from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass, field
+from collections import defaultdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -275,7 +275,11 @@ def spending_velocity(
         "active_days": len(daily_amounts),
         "total_days": days,
         "trend_slope": round(trend_slope, 2),
-        "trend_direction": "increasing" if trend_slope > 10 else "decreasing" if trend_slope < -10 else "stable",
+        "trend_direction": (
+            "increasing" if trend_slope > 10
+            else "decreasing" if trend_slope < -10
+            else "stable"
+        ),
     }
 
 
@@ -304,8 +308,16 @@ def week_over_week_comparison(
         return round((current - previous) / previous * 100, 1)
 
     return {
-        "this_week": {"spend": this_spend, "income": this_income, "net": round(this_income - this_spend, 2)},
-        "last_week": {"spend": last_spend, "income": last_income, "net": round(last_income - last_spend, 2)},
+        "this_week": {
+            "spend": this_spend,
+            "income": this_income,
+            "net": round(this_income - this_spend, 2),
+        },
+        "last_week": {
+            "spend": last_spend,
+            "income": last_income,
+            "net": round(last_income - last_spend, 2),
+        },
         "spend_change_pct": _pct_change(this_spend, last_spend),
         "income_change_pct": _pct_change(this_income, last_income),
         "verdict": (
@@ -355,8 +367,10 @@ def day_of_week_analysis(
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     transactions = list_transactions(db_path=db_path, since=since)
 
-    days_map = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
-                4: "Friday", 5: "Saturday", 6: "Sunday"}
+    days_map = {
+        0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
+        4: "Friday", 5: "Saturday", 6: "Sunday",
+    }
     buckets: Dict[str, float] = defaultdict(float)
 
     for tx in transactions:
@@ -375,7 +389,6 @@ def spending_forecast(
     horizon_days: int = 30,
 ) -> SpendingForecast:
     """Project spend and income for the next period using linear regression."""
-    # Use 90 days of history as baseline
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=90)
     transactions = list_transactions(db_path=db_path, since=since)
 
@@ -426,20 +439,26 @@ def financial_health_score(
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     transactions = list_transactions(db_path=db_path, since=since)
 
-    total_in = sum(t.get("amount", 0) or 0 for t in transactions if t.get("type") in CREDIT_TYPES)
-    total_out = sum(t.get("amount", 0) or 0 for t in transactions if t.get("type") in DEBIT_TYPES)
+    total_in = sum(
+        t.get("amount", 0) or 0 for t in transactions if t.get("type") in CREDIT_TYPES
+    )
+    total_out = sum(
+        t.get("amount", 0) or 0 for t in transactions if t.get("type") in DEBIT_TYPES
+    )
 
-    # Savings rate component (0-40 points)
+    # Savings rate component (0–40 points)
     savings_rate = ((total_in - total_out) / total_in) if total_in > 0 else 0
     savings_rate = max(0.0, min(1.0, savings_rate))
     savings_score = savings_rate * 40
 
-    # Spend diversity (0-30 points) — more categories = more controlled spending
-    categories = set(t.get("category") for t in transactions if t.get("type") in DEBIT_TYPES)
+    # Spend diversity (0–30 points) — more categories = more controlled spending
+    categories = {
+        t.get("category") for t in transactions if t.get("type") in DEBIT_TYPES
+    }
     diversity = min(len(categories) / 8, 1.0)
     diversity_score = diversity * 30
 
-    # Income stability (0-20 points)
+    # Income stability (0–20 points)
     by_week: Dict[int, float] = defaultdict(float)
     for tx in transactions:
         if tx.get("type") not in CREDIT_TYPES:
@@ -451,13 +470,17 @@ def financial_health_score(
 
     income_values = list(by_week.values())
     if len(income_values) > 1:
-        cv = _safe_stdev(income_values) / _safe_mean(income_values) if _safe_mean(income_values) else 1
+        cv = (
+            _safe_stdev(income_values) / _safe_mean(income_values)
+            if _safe_mean(income_values)
+            else 1
+        )
         stability = max(0.0, 1 - cv)
     else:
         stability = 0.5
     stability_score = stability * 20
 
-    # Unusual activity penalty (0-10 points lost)
+    # Unusual activity penalty (up to 10 points lost)
     from pesa_logger.anomaly import detect_anomalies
     anomalies = detect_anomalies(db_path=db_path, lookback_days=days)
     unusual_count = len(anomalies)
@@ -466,7 +489,13 @@ def financial_health_score(
     raw_score = savings_score + diversity_score + stability_score - anomaly_penalty
     score = max(0, min(100, int(raw_score)))
 
-    grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 55 else "D" if score >= 40 else "F"
+    grade = (
+        "A" if score >= 85
+        else "B" if score >= 70
+        else "C" if score >= 55
+        else "D" if score >= 40
+        else "F"
+    )
 
     summary_map = {
         "A": "Excellent financial health. Strong savings and stable income.",
@@ -515,13 +544,18 @@ def _build_insights_context(
     }, indent=2)
 
 
-def generate_ai_narrative(
-    context_json: str,
-    provider: str = "auto",
-) -> Tuple[str, str]:
+def generate_ai_narrative(context_json: str) -> Tuple[str, str]:
     """
-    Generate AI narrative and spending coach messages.
-    Returns (narrative, coach_message, provider_used).
+    Generate AI narrative and spending coach messages from a context JSON blob.
+
+    Parameters
+    ----------
+    context_json : JSON string produced by _build_insights_context().
+
+    Returns
+    -------
+    (narrative, coach_message) — both strings.
+    Returns human-readable fallback strings when AI_PROVIDER=stub or unavailable.
     """
     from pesa_logger.ai_engine import get_engine
     from pesa_logger.prompts import load as load_prompt
@@ -535,7 +569,6 @@ def generate_ai_narrative(
         system=insights_system,
         user=f"Here is the financial summary data:\n\n{context_json}",
     )
-
     coach_resp = engine.complete(
         system=coach_system,
         user=f"Monthly spending breakdown:\n\n{context_json}",
@@ -557,6 +590,7 @@ def generate_insights(
 ) -> List[str]:
     """
     Generate plain-English financial insights.
+
     Backward-compatible with the original signature — returns List[str].
     """
     report = generate_full_report(db_path=db_path, days=days)
@@ -575,14 +609,18 @@ def generate_full_report(
     """
     Generate a comprehensive InsightReport — the main analytics entry point.
 
-    This is the production-grade function. It runs all analytics in sequence
-    and returns a single structured InsightReport object.
+    Runs all analytics in sequence and returns a single structured object
+    ready for JSON serialisation via report_to_dict().
     """
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     transactions = list_transactions(db_path=db_path, since=since)
 
-    total_in = sum(t.get("amount", 0) or 0 for t in transactions if t.get("type") in CREDIT_TYPES)
-    total_out = sum(t.get("amount", 0) or 0 for t in transactions if t.get("type") in DEBIT_TYPES)
+    total_in = sum(
+        t.get("amount", 0) or 0 for t in transactions if t.get("type") in CREDIT_TYPES
+    )
+    total_out = sum(
+        t.get("amount", 0) or 0 for t in transactions if t.get("type") in DEBIT_TYPES
+    )
     net = total_in - total_out
 
     top_cats = top_spending_categories(db_path=db_path, limit=8, days=days)
@@ -596,7 +634,7 @@ def generate_full_report(
     forecast = spending_forecast(db_path=db_path) if include_forecast else None
     health = financial_health_score(db_path=db_path, days=days) if include_health_score else None
 
-    # Rule-based insights (always available, no AI required)
+    # ── Rule-based insights (always available, no AI needed) ──────────────────
     insights: List[str] = []
 
     if top_cats:
@@ -609,16 +647,16 @@ def generate_full_report(
     avg = velocity["average_daily_spend"]
     if avg > 0:
         direction = velocity["trend_direction"]
-        insights.append(
-            f"Daily spend averaging KES {avg:,.2f} — trend is {direction}."
-        )
+        insights.append(f"Daily spend averaging KES {avg:,.2f} — trend is {direction}.")
 
     if net >= 0:
         insights.append(f"Net cashflow: +KES {net:,.2f} surplus over {days} days.")
     else:
-        insights.append(f"Net cashflow: -KES {abs(net):,.2f} deficit over {days} days. Consider reducing discretionary spend.")
+        insights.append(
+            f"Net cashflow: -KES {abs(net):,.2f} deficit over {days} days. "
+            "Consider reducing discretionary spend."
+        )
 
-    wow_verdict = wow.get("verdict", "")
     wow_pct = wow.get("spend_change_pct")
     if wow_pct is not None and abs(wow_pct) > 5:
         direction_word = "up" if wow_pct > 0 else "down"
@@ -626,19 +664,24 @@ def generate_full_report(
 
     if tod:
         peak_period = max(tod, key=tod.get)
-        insights.append(f"Most spending happens in the {peak_period} — KES {tod[peak_period]:,.2f}.")
+        insights.append(
+            f"Most spending happens in the {peak_period} — KES {tod[peak_period]:,.2f}."
+        )
 
     if health:
-        insights.append(f"Financial health score: {health.score}/100 (Grade {health.grade}). {health.summary}")
+        insights.append(
+            f"Financial health score: {health.score}/100 (Grade {health.grade}). {health.summary}"
+        )
 
     if forecast and forecast.confidence in ("high", "medium"):
         net_word = "surplus" if forecast.projected_net >= 0 else "deficit"
         insights.append(
-            f"Forecast ({forecast.confidence} confidence): projected KES {forecast.projected_spend:,.2f} "
-            f"spend in the next 30 days — {net_word} of KES {abs(forecast.projected_net):,.2f}."
+            f"Forecast ({forecast.confidence} confidence): projected KES "
+            f"{forecast.projected_spend:,.2f} spend in the next 30 days — "
+            f"{net_word} of KES {abs(forecast.projected_net):,.2f}."
         )
 
-    # AI narrative
+    # ── AI narrative ──────────────────────────────────────────────────────────
     context_json = _build_insights_context(
         transactions, top_cats, velocity, wow, total_in, total_out, days
     )
@@ -671,5 +714,4 @@ def generate_full_report(
 
 def report_to_dict(report: InsightReport) -> Dict[str, Any]:
     """Serialize an InsightReport to a JSON-safe dict."""
-    d = asdict(report)
-    return d
+    return asdict(report)

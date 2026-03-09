@@ -1,0 +1,45 @@
+services:
+  pesa-logger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: pesa-logger:latest
+    container_name: pesa-logger
+
+    ports:
+      - "5000:5000"
+
+    # Load all secrets and config from .env
+    # Copy .env.example → .env and fill in your values before running
+    env_file:
+      - .env
+
+    volumes:
+      # Persist the SQLite database across container restarts
+      # The DB is written to /app/data/pesa_logger.db inside the container
+      - pesa_data:/app/data
+
+    # Restart policy — keeps the logger running after crashes or reboots
+    restart: unless-stopped
+
+    # Only start when healthy (useful if you add dependent services later)
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Resource limits — reasonable for a single-user fintech logger
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+volumes:
+  pesa_data:
+    driver: local

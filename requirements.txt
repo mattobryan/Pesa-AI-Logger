@@ -1,4 +1,4 @@
-# ── Core ──────────────────────────────────────────────────────────────────────
+# ── Core ─────────────────────────────────────────────────────────────────────
 flask>=3.0.0
 openpyxl>=3.1.0
 
@@ -6,11 +6,21 @@ openpyxl>=3.1.0
 pytest>=8.0.0
 pytest-cov>=5.0.0
 
-# ── AI Providers (install the one matching your AI_PROVIDER env var) ──────────
-# openai provider:
+# ── Security audit (CI only, harmless to install locally) ────────────────────
+pip-audit>=2.7.0
+
+# ── AI Providers ──────────────────────────────────────────────────────────────
+# Install the package matching your AI_PROVIDER env var.
+# stub and ollama require no package — stub is the safe default.
+
+# AI_PROVIDER=openai
 openai>=1.0.0
 
-# anthropic provider:
+# AI_PROVIDER=anthropic
 anthropic>=0.25.0
 
-# ollama: runs locally, no package needed — just install Ollama from ollama.ai
+# ── Web3 / Ledger Anchoring ───────────────────────────────────────────────────
+# Only required when WEB3_ENABLED=true in your .env.
+# Safe to leave out if you're running in local-only mode.
+
+# web3>=6.0.0

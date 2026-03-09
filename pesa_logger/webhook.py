@@ -525,6 +525,121 @@ def create_app(
             return jsonify([asdict(p) for p in profiles]), 200
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+    
+    # -------------------------------------------------------------------------
+    # Ledger — Web3 anchor endpoints (T3)
+    # -------------------------------------------------------------------------
+
+    @app.route("/ledger/anchor", methods=["POST"])
+    def ledger_anchor():
+        """Trigger an on-chain anchor of pending ledger transactions.
+
+        Body (optional JSON):
+            { "force": true }   — anchor even if below threshold
+
+        Returns the anchor result including merkle_root and status.
+        """
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.web3_anchor import anchor_pending_transactions, Web3Config
+
+        body = request.get_json(silent=True) or {}
+        force = bool(body.get("force", False))
+
+        try:
+            config = Web3Config()
+            result = anchor_pending_transactions(
+                db_path=_db,
+                config=config,
+                force=force,
+            )
+            status_code = 200 if result.get("anchored") else 202
+            return jsonify(result), status_code
+
+        except Exception as exc:
+            return jsonify({"error": f"Anchor failed: {exc}"}), 500
+
+    @app.route("/ledger/anchors", methods=["GET"])
+    def ledger_anchors():
+        """List all on-chain anchor records.
+
+        Query params:
+            limit  : max records to return (default 50)
+            status : filter by status (confirmed | web3_disabled | failed | pending)
+        """
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.web3_anchor import list_anchor_records, get_anchor_summary
+
+        limit = max(1, min(200, int(request.args.get("limit", 50))))
+        status_filter = request.args.get("status") or None
+
+        try:
+            records = list_anchor_records(
+                db_path=_db,
+                limit=limit,
+                status=status_filter,
+            )
+            summary = get_anchor_summary(db_path=_db)
+            return jsonify({"summary": summary, "anchors": records}), 200
+
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/ledger/verify-onchain", methods=["GET"])
+    def ledger_verify_onchain():
+        """Verify a Merkle root against the Polygon PesaAnchor contract.
+
+        Query params:
+            root : Merkle root hex string to verify (required)
+                   If omitted, verifies the most recently confirmed anchor.
+        """
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.web3_anchor import (
+            verify_onchain, list_anchor_records, Web3Config
+        )
+
+        merkle_root = request.args.get("root") or ""
+
+        # If no root given, verify the most recent confirmed anchor
+        if not merkle_root:
+            recent = list_anchor_records(_db, limit=1, status="confirmed")
+            if not recent:
+                return jsonify({
+                    "verified": False,
+                    "message": "No confirmed on-chain anchors found. Run POST /ledger/anchor first.",
+                }), 404
+            merkle_root = recent[0]["merkle_root"]
+
+        try:
+            config = Web3Config()
+            result = verify_onchain(merkle_root=merkle_root, config=config)
+            return jsonify(result), 200
+
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/ledger/anchor-summary", methods=["GET"])
+    def ledger_anchor_summary():
+        """Return Web3 anchor status summary for the dashboard."""
+        auth_error = _require_auth()
+        if auth_error:
+            return auth_error
+
+        from pesa_logger.web3_anchor import get_anchor_summary
+
+        try:
+            return jsonify(get_anchor_summary(db_path=_db)), 200
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+        
     return app
 
 

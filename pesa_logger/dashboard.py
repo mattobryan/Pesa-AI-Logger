@@ -17,7 +17,9 @@ Tabs
 ----
 1. Overview      — live stats, heartbeat pulse, recent transactions + type chart
 2. Transactions  — filterable full ledger table with summary stats
-3. Analytics     — AI insights, anomaly detection, monthly + weekly bar charts
+3. Analytics     — full T2 report: AI narrative, health score, forecast,
+                   categories, cashflow, anomalies + AI explanations,
+                   counterparty profiles, time-of-day, day-of-week, coach
 4. Health        — system status, heartbeat history, full endpoint reference
 5. Ledger        — tamper-evident chain verify + events table
 6. SMS Tester    — paste any M-Pesa SMS and see it parsed live
@@ -56,7 +58,7 @@ def build_logout_response(session: dict) -> tuple:
 def is_authenticated(api_key: str, session: dict) -> bool:
     """Return True when the current session is allowed through."""
     if not api_key:
-        return True  # No key configured = open access
+        return True
     return bool(session.get("authenticated"))
 
 
@@ -217,7 +219,6 @@ def build_login_page(error: bool = False) -> tuple:
 def build_dashboard_page(api_key_configured: bool = False) -> tuple:
     """Return the full SPA dashboard HTML."""
 
-    # JS fetch headers — include API key header if auth is enabled
     fetch_headers = "{'X-API-Key': sessionStorage.getItem('_pk') || ''}" if api_key_configured else "{}"
 
     html = f"""<!DOCTYPE html>
@@ -319,10 +320,12 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
     .sc .val{{font-size:26px;font-weight:700;color:var(--green);margin:7px 0 3px;font-family:var(--mono);line-height:1}}
     .sc .sub{{font-size:10px;color:var(--muted)}}
     .val.red{{color:var(--red)}} .val.blue{{color:var(--blue)}} .val.white{{color:var(--text)}}
+    .val.yellow{{color:var(--yellow)}}
 
     /* ── Two-col ── */
-    .two-col{{display:grid;grid-template-columns:1fr 340px;gap:18px}}
-    @media(max-width:1080px){{.two-col{{grid-template-columns:1fr}}}}
+    .two-col{{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}}
+    .two-col-wide{{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-bottom:18px}}
+    @media(max-width:1080px){{.two-col,.two-col-wide{{grid-template-columns:1fr}}}}
 
     /* ── Panel ── */
     .panel{{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden}}
@@ -383,10 +386,102 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
     .ins-txt{{font-size:12px;line-height:1.65;color:var(--text)}}
 
     /* ── Anomaly ── */
-    .anom{{background:rgba(255,77,109,.04);border:1px solid rgba(255,77,109,.13);border-radius:9px;padding:13px;margin-bottom:9px}}
+    .anom{{
+      background:rgba(255,77,109,.04);border:1px solid rgba(255,77,109,.13);
+      border-radius:9px;padding:13px;margin-bottom:9px;
+    }}
+    .anom.sev-critical{{border-color:rgba(255,77,109,.4);background:rgba(255,77,109,.07)}}
+    .anom.sev-high{{border-color:rgba(255,77,109,.25)}}
+    .anom.sev-medium{{border-color:rgba(255,209,102,.2);background:rgba(255,209,102,.03)}}
+    .anom.sev-low{{border-color:rgba(255,255,255,.07);background:rgba(255,255,255,.015)}}
+    .anom-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}}
     .anom-type{{font-size:10px;font-family:var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.06em}}
-    .anom-desc{{font-size:12px;color:var(--text);margin-top:3px}}
+    .anom-sev{{font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:9999px}}
+    .anom-desc{{font-size:12px;color:var(--text);margin-top:3px;line-height:1.5}}
+    .anom-ai{{
+      font-size:11px;color:var(--blue);margin-top:7px;padding-top:7px;
+      border-top:1px solid rgba(0,184,255,.1);line-height:1.55;
+      display:flex;gap:6px;align-items:flex-start;
+    }}
+    .anom-ai-ico{{font-size:12px;flex-shrink:0;margin-top:1px}}
     .anom-meta{{font-size:10px;color:var(--muted);margin-top:5px;font-family:var(--mono)}}
+
+    /* ── AI Banner ── */
+    .ai-banner{{
+      background:linear-gradient(135deg,rgba(0,255,157,0.04),rgba(0,184,255,0.04));
+      border:1px solid rgba(0,255,157,0.18);border-radius:var(--r);
+      padding:20px 24px;margin-bottom:18px;position:relative;overflow:hidden;
+    }}
+    .ai-banner::before{{
+      content:'';position:absolute;top:-30px;right:-30px;
+      width:120px;height:120px;
+      background:radial-gradient(circle,rgba(0,255,157,0.07) 0%,transparent 70%);
+    }}
+    .ai-banner-label{{
+      font-size:9px;font-family:var(--mono);color:var(--green);
+      text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;
+      display:flex;align-items:center;gap:6px;
+    }}
+    .ai-banner-label::before{{
+      content:'';width:6px;height:6px;background:var(--green);
+      border-radius:50%;box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;
+    }}
+    .ai-banner-text{{font-size:13px;line-height:1.7;color:var(--text);position:relative}}
+
+    /* ── Coach Banner ── */
+    .coach-banner{{
+      background:linear-gradient(135deg,rgba(255,209,102,0.04),rgba(192,132,252,0.04));
+      border:1px solid rgba(255,209,102,0.18);border-radius:var(--r);
+      padding:20px 24px;margin-top:18px;
+    }}
+    .coach-banner-label{{
+      font-size:9px;font-family:var(--mono);color:var(--yellow);
+      text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;
+    }}
+    .coach-banner-text{{font-size:13px;line-height:1.7;color:var(--text)}}
+
+    /* ── Category bar ── */
+    .cat-row{{margin-bottom:12px}}
+    .cat-top{{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}}
+    .cat-name{{font-size:11px;font-weight:500}}
+    .cat-meta{{font-size:10px;font-family:var(--mono);color:var(--muted)}}
+    .cat-bar-bg{{background:var(--muted2);border-radius:9999px;height:5px;overflow:hidden}}
+    .cat-bar-fill{{height:100%;border-radius:9999px;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .4s ease}}
+
+    /* ── Health score ── */
+    .health-grade{{
+      width:70px;height:70px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      font-family:var(--mono);font-size:28px;font-weight:700;
+      border:3px solid var(--green);flex-shrink:0;
+    }}
+    .health-grade.B{{border-color:var(--blue);color:var(--blue)}}
+    .health-grade.C{{border-color:var(--yellow);color:var(--yellow)}}
+    .health-grade.D,.health-grade.F{{border-color:var(--red);color:var(--red)}}
+    .health-bar{{height:6px;background:var(--muted2);border-radius:9999px;margin-bottom:10px;overflow:hidden}}
+    .health-bar-fill{{height:100%;border-radius:9999px}}
+
+    /* ── Counterparty ── */
+    .cp-row{{
+      display:flex;align-items:flex-start;justify-content:space-between;
+      padding:10px 0;border-bottom:1px solid var(--border2);gap:10px;
+    }}
+    .cp-row:last-child{{border-bottom:none}}
+    .cp-name{{font-size:12px;font-weight:500;flex:1}}
+    .cp-flags{{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}}
+    .cp-flag{{font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(255,77,109,.08);color:var(--red);border:1px solid rgba(255,77,109,.15)}}
+    .cp-amounts{{text-align:right;flex-shrink:0}}
+    .cp-sent{{font-size:10px;font-family:var(--mono);color:var(--red)}}
+    .cp-recv{{font-size:10px;font-family:var(--mono);color:var(--green)}}
+
+    /* ── Forecast ── */
+    .forecast-conf{{
+      font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:9999px;
+      border:1px solid;display:inline-block;margin-bottom:10px;
+    }}
+    .forecast-conf.high{{color:var(--green);border-color:rgba(0,255,157,.3);background:rgba(0,255,157,.07)}}
+    .forecast-conf.medium{{color:var(--yellow);border-color:rgba(255,209,102,.3);background:rgba(255,209,102,.07)}}
+    .forecast-conf.low{{color:var(--muted);border-color:var(--border2)}}
 
     /* ── Health ── */
     .hstat{{display:flex;align-items:center;gap:14px;padding:18px;background:var(--bg);border-radius:9px;border:1px solid var(--border2);margin-bottom:14px}}
@@ -398,6 +493,21 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
     .lv{{display:flex;align-items:center;gap:11px;padding:16px;border-radius:9px;margin-bottom:14px;font-family:var(--mono);font-size:12px}}
     .lv.ok{{background:rgba(0,255,157,.05);border:1px solid rgba(0,255,157,.18);color:var(--green)}}
     .lv.err{{background:rgba(255,77,109,.05);border:1px solid rgba(255,77,109,.18);color:var(--red)}}
+
+    /* ── Web3 anchor ── */
+    .lv.disabled{{background:rgba(255,200,0,.04);border:1px solid rgba(255,200,0,.18);color:var(--yellow)}}
+    .anchor-row{{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px}}
+    @media(max-width:900px){{.anchor-row{{grid-template-columns:1fr 1fr}}}}
+    .anchor-stat{{background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:14px 16px}}
+    .anchor-stat .asv{{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green);margin-bottom:2px}}
+    .anchor-stat .asl{{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}}
+    .anchor-actions{{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}}
+    .w3-badge{{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.04em}}
+    .w3-confirmed{{background:rgba(0,255,157,.1);color:var(--green);border:1px solid rgba(0,255,157,.25)}}
+    .w3-disabled{{background:rgba(255,200,0,.1);color:var(--yellow);border:1px solid rgba(255,200,0,.25)}}
+    .w3-pending{{background:rgba(100,100,255,.1);color:#8fa8ff;border:1px solid rgba(100,100,255,.25)}}
+    .w3-failed{{background:rgba(255,77,109,.1);color:var(--red);border:1px solid rgba(255,77,109,.25)}}
+    .root-hash{{font-family:var(--mono);font-size:9px;color:var(--muted);word-break:break-all}}
 
     /* ── SMS tester ── */
     .sms-in{{
@@ -415,6 +525,7 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
 
     /* ── Chart ── */
     .cw{{position:relative;height:200px}}
+    .cw-sm{{position:relative;height:160px}}
 
     /* ── Skeleton ── */
     .sk{{
@@ -547,37 +658,97 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
       </div>
     </div>
 
-    <!-- ━━━ ANALYTICS ━━━ -->
+    <!-- ━━━ ANALYTICS (T2) ━━━ -->
     <div class="tab" id="tab-analytics">
-      <div class="two-col">
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div class="panel">
-            <div class="ph">
-              <span class="pt">AI Insights</span>
-              <select id="insDays" onchange="loadInsights()" style="background:var(--bg);border:1px solid var(--border2);color:var(--muted);padding:4px 7px;border-radius:5px;font-size:10px">
-                <option value="7">7 days</option>
-                <option value="30" selected>30 days</option>
-                <option value="90">90 days</option>
-              </select>
-            </div>
-            <div class="pb" id="insBody"><div class="ld">Generating…</div></div>
-          </div>
-          <div class="panel">
-            <div class="ph"><span class="pt">Anomalies</span><span id="anomCount" style="font-size:10px;font-family:var(--mono);color:var(--muted)">—</span></div>
-            <div class="pb" id="anomBody"><div class="ld">Scanning…</div></div>
-          </div>
+
+      <!-- Controls row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:10px;font-family:var(--mono);color:var(--muted)">PERIOD</span>
+          <select id="anDays" onchange="loadAnalytics()" style="background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:7px;font-size:11px;font-family:var(--mono);outline:none">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+            <option value="180">180 days</option>
+          </select>
         </div>
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div class="panel">
-            <div class="ph"><span class="pt">Monthly</span></div>
-            <div class="pb"><div class="cw"><canvas id="monthChart"></canvas></div></div>
-          </div>
-          <div class="panel">
-            <div class="ph"><span class="pt">Weekly</span></div>
-            <div class="pb"><div class="cw"><canvas id="weekChart"></canvas></div></div>
-          </div>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:9px;font-family:var(--mono);color:var(--muted)">AI ENGINE</span>
+          <span id="aiProviderBadge" class="chip cx">stub</span>
         </div>
       </div>
+
+      <!-- AI Narrative banner -->
+      <div class="ai-banner" id="anNarrative">
+        <div class="ai-banner-label">AI NARRATIVE</div>
+        <div class="ai-banner-text"><div class="ld">Generating analysis…</div></div>
+      </div>
+
+      <!-- Stats: health score | net flow | projected spend | forecast confidence -->
+      <div class="stat-grid" id="anStats">
+        <div class="sc"><div class="sk" style="width:50%"></div><div class="sk" style="width:40%;height:24px"></div></div>
+        <div class="sc"><div class="sk" style="width:50%"></div><div class="sk" style="width:40%;height:24px"></div></div>
+        <div class="sc"><div class="sk" style="width:50%"></div><div class="sk" style="width:40%;height:24px"></div></div>
+        <div class="sc"><div class="sk" style="width:50%"></div><div class="sk" style="width:40%;height:24px"></div></div>
+      </div>
+
+      <!-- Row: Categories + Health score detail -->
+      <div class="two-col-wide">
+        <div class="panel">
+          <div class="ph"><span class="pt">Top Spending Categories</span></div>
+          <div class="pb" id="anCats"><div class="ld">Loading…</div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="pt">Financial Health</span></div>
+          <div class="pb" id="anHealth"><div class="ld">Scoring…</div></div>
+        </div>
+      </div>
+
+      <!-- Row: Cashflow trend + Forecast -->
+      <div class="two-col-wide">
+        <div class="panel">
+          <div class="ph"><span class="pt">Cashflow Trend</span></div>
+          <div class="pb"><div class="cw"><canvas id="cashflowChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="pt">30-Day Forecast</span></div>
+          <div class="pb" id="anForecast"><div class="ld">Projecting…</div></div>
+        </div>
+      </div>
+
+      <!-- Row: Anomalies + Counterparties -->
+      <div class="two-col">
+        <div class="panel">
+          <div class="ph">
+            <span class="pt">Anomalies</span>
+            <span id="anAnoCount" style="font-size:10px;font-family:var(--mono);color:var(--muted)">—</span>
+          </div>
+          <div class="pb" id="anAnoms"><div class="ld">Scanning…</div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="pt">Top Counterparties</span></div>
+          <div class="pb" id="anCounterparties"><div class="ld">Loading…</div></div>
+        </div>
+      </div>
+
+      <!-- Row: Time of Day + Day of Week -->
+      <div class="two-col">
+        <div class="panel">
+          <div class="ph"><span class="pt">Spend by Time of Day</span></div>
+          <div class="pb"><div class="cw-sm"><canvas id="todChart"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="pt">Spend by Day of Week</span></div>
+          <div class="pb"><div class="cw-sm"><canvas id="dowChart"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- AI Spending Coach -->
+      <div class="coach-banner" id="anCoach">
+        <div class="coach-banner-label">💡 AI SPENDING COACH</div>
+        <div class="coach-banner-text"><div class="ld">Generating advice…</div></div>
+      </div>
+
     </div>
 
     <!-- ━━━ HEALTH ━━━ -->
@@ -602,9 +773,37 @@ def build_dashboard_page(api_key_configured: bool = False) -> tuple:
 
     <!-- ━━━ LEDGER ━━━ -->
     <div class="tab" id="tab-ledger">
+      <!-- Local chain status banner -->
       <div id="ledgerV" style="margin-bottom:16px"><div class="ld">Verifying chain…</div></div>
+
+      <!-- Web3 anchor summary -->
+      <div id="w3Summary" style="margin-bottom:16px"><div class="ld">Loading Web3 status…</div></div>
+
+      <!-- Anchor action buttons -->
+      <div class="anchor-actions">
+        <button class="btn-s bg" id="btnAnchor" onclick="triggerAnchor(false)">⛓ Anchor Now</button>
+        <button class="btn-s" id="btnAnchorForce" onclick="triggerAnchor(true)" style="opacity:.7">⛓ Force Anchor</button>
+        <button class="btn-s" onclick="verifyOnchain()">🔍 Verify On-Chain</button>
+        <button class="btn-s" onclick="loadLedger()">↻ Refresh</button>
+      </div>
+
+      <!-- Verify on-chain result -->
+      <div id="w3VerifyResult" style="margin-bottom:16px;display:none"></div>
+
+      <!-- On-chain anchors table -->
+      <div class="panel" style="margin-bottom:16px">
+        <div class="ph"><span class="pt">On-Chain Anchors</span><span id="w3AnchorCount" class="tag" style="margin-left:8px"></span></div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Merkle Root</th><th>Txs</th><th>Block</th><th>Status</th><th>Anchored At</th><th>Polygonscan</th></tr></thead>
+            <tbody id="w3AnchorBody"><tr><td colspan="6"><div class="ld" style="padding:18px">Loading…</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Local ledger events -->
       <div class="panel">
-        <div class="ph"><span class="pt">Ledger Events</span><button class="pa" onclick="loadLedger()">↻ Refresh</button></div>
+        <div class="ph"><span class="pt">Local Ledger Events</span></div>
         <div class="tw">
           <table>
             <thead><tr><th>Seq</th><th>Table</th><th>Entity ID</th><th>Event Hash</th><th>Prev Hash</th><th>Created At</th></tr></thead>
@@ -688,6 +887,15 @@ function fmt(n) {{
   return parseFloat(n).toLocaleString('en-KE', {{minimumFractionDigits:2,maximumFractionDigits:2}});
 }}
 
+function fmtCompact(n) {{
+  if (!n && n !== 0) return '—';
+  const v = Math.abs(parseFloat(n));
+  const sign = parseFloat(n) < 0 ? '-' : '';
+  if (v >= 1000000) return sign + (v/1000000).toFixed(1) + 'M';
+  if (v >= 1000) return sign + (v/1000).toFixed(1) + 'K';
+  return sign + v.toFixed(0);
+}}
+
 function esc(v) {{
   return String(v ?? '')
     .replace(/&/g, '&amp;')
@@ -759,7 +967,16 @@ function mkChart(id, type, labels, datasets, opts={{}}) {{
   }});
 }}
 
-// ━━━ OVERVIEW ━━━
+const BAR_SCALE = {{
+  scales:{{
+    x:{{ticks:{{color:'#4a6b5a',font:{{size:9}}}},grid:{{color:'rgba(255,255,255,.025)'}}}},
+    y:{{ticks:{{color:'#4a6b5a',font:{{size:9}}}},grid:{{color:'rgba(255,255,255,.025)'}}}}
+  }}
+}};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// OVERVIEW
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function loadOverview() {{
   const [txs, hb] = await Promise.all([api('/transactions?limit=500'), api('/monitor/heartbeat?record=0')]);
   if (txs) {{
@@ -801,7 +1018,9 @@ async function loadOverview() {{
   }}
 }}
 
-// ━━━ TRANSACTIONS ━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRANSACTIONS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function loadTx() {{
   const type = document.getElementById('txType').value;
   const cat  = document.getElementById('txCat').value;
@@ -838,48 +1057,260 @@ function clearTxF() {{
   loadTx();
 }}
 
-// ━━━ ANALYTICS ━━━
-async function loadAnalytics() {{ await Promise.all([loadInsights(),loadAnomalies(),loadBarCharts()]); }}
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ANALYTICS — T2 full wiring
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function loadInsights() {{
-  const days = document.getElementById('insDays').value;
-  const d = await api(`/analytics/insights?days=${{days}}`);
-  const b = document.getElementById('insBody');
-  if (!d||!d.insights) {{ b.innerHTML='<div class="empty"><span class="ei">💡</span>No insights yet</div>'; return; }}
-  const items = Array.isArray(d.insights)?d.insights:[d.insights];
-  b.innerHTML = items.map(i=>`<div class="ins"><div class="ins-dot"></div><div class="ins-txt">${{esc(i)}}</div></div>`).join('');
-}}
+async function loadAnalytics() {{
+  const days = document.getElementById('anDays').value;
 
-async function loadAnomalies() {{
-  const d = await api('/analytics/anomalies?days=90');
-  document.getElementById('anomCount').textContent = d?`${{d.length}} found`:'';
-  const b = document.getElementById('anomBody');
-  if (!d||!d.length) {{ b.innerHTML='<div class="empty"><span class="ei">✅</span>No anomalies detected</div>'; return; }}
-  b.innerHTML = d.map(a=>`<div class="anom">
-    <div class="anom-type">${{esc(a.anomaly_type||a.type||'anomaly')}}</div>
-    <div class="anom-desc">${{esc(a.description||a.reason||JSON.stringify(a))}}</div>
-    <div class="anom-meta">${{shortText(a.event_time_utc||a.timestamp||'',19)}}</div>
-  </div>`).join('');
-}}
+  // Reset all panels to loading state
+  document.getElementById('anNarrative').innerHTML = '<div class="ai-banner-label">AI NARRATIVE</div><div class="ai-banner-text"><div class="ld">Generating analysis…</div></div>';
+  document.getElementById('anCoach').innerHTML     = '<div class="coach-banner-label">💡 AI SPENDING COACH</div><div class="coach-banner-text"><div class="ld">Generating advice…</div></div>';
+  document.getElementById('anCats').innerHTML      = '<div class="ld">Loading…</div>';
+  document.getElementById('anHealth').innerHTML    = '<div class="ld">Scoring…</div>';
+  document.getElementById('anForecast').innerHTML  = '<div class="ld">Projecting…</div>';
+  document.getElementById('anAnoms').innerHTML     = '<div class="ld">Scanning…</div>';
+  document.getElementById('anCounterparties').innerHTML = '<div class="ld">Loading…</div>';
 
-async function loadBarCharts() {{
-  const [mo,wk] = await Promise.all([api('/analytics/summary/monthly?months=6'),api('/analytics/summary/weekly?weeks=8')]);
-  const barOpts = {{ scales:{{ x:{{ticks:{{color:'#4a6b5a',font:{{size:9}}}},grid:{{color:'rgba(255,255,255,.025)'}}}}, y:{{ticks:{{color:'#4a6b5a',font:{{size:9}}}},grid:{{color:'rgba(255,255,255,.025)'}}}} }} }};
-  if (mo&&Array.isArray(mo)) {{
-    mkChart('monthChart','bar',mo.map(d=>d.month||d.period||''),[
-      {{label:'Received',data:mo.map(d=>parseFloat(d.total_received||d.income||0)),backgroundColor:'rgba(0,255,157,.5)',borderColor:'var(--green)',borderWidth:1}},
-      {{label:'Spent',   data:mo.map(d=>parseFloat(d.total_spent||d.expenses||0)),backgroundColor:'rgba(255,77,109,.5)',borderColor:'var(--red)',   borderWidth:1}},
-    ],barOpts);
+  // Fetch full T2 report + anomaly detail in parallel
+  const [full, anomalies] = await Promise.all([
+    api(`/analytics/full?days=${{days}}&include_forecast=1&include_health=1`),
+    api(`/analytics/anomalies?days=${{days}}`),
+  ]);
+
+  if (!full) {{
+    document.getElementById('anNarrative').innerHTML = '<div class="ai-banner-label">AI NARRATIVE</div><div class="ai-banner-text" style="color:var(--muted)">Analytics unavailable — check server logs.</div>';
+    return;
   }}
-  if (wk&&Array.isArray(wk)) {{
-    mkChart('weekChart','bar',wk.map(d=>d.week||d.period||''),[
-      {{label:'Received',data:wk.map(d=>parseFloat(d.total_received||d.income||0)),backgroundColor:'rgba(0,255,157,.5)',borderColor:'var(--green)',borderWidth:1}},
-      {{label:'Spent',   data:wk.map(d=>parseFloat(d.total_spent||d.expenses||0)),backgroundColor:'rgba(255,77,109,.5)',borderColor:'var(--red)',   borderWidth:1}},
-    ],barOpts);
+
+  // ── AI provider badge ──────────────────────────────────────────────────
+  const provBadge = document.getElementById('aiProviderBadge');
+  const prov = full.ai_provider || 'stub';
+  provBadge.textContent = prov;
+  provBadge.className = 'chip ' + (prov==='stub'?'cx': prov==='openai'?'cg': prov==='anthropic'?'cp':'cb');
+
+  // ── AI narrative ──────────────────────────────────────────────────────
+  const narrative = full.ai_narrative || '';
+  const isStubNarrative = narrative.includes('not configured') || narrative.includes('unavailable');
+  if (narrative && !isStubNarrative) {{
+    document.getElementById('anNarrative').innerHTML =
+      `<div class="ai-banner-label">AI NARRATIVE</div><div class="ai-banner-text">${{esc(narrative)}}</div>`;
+  }} else {{
+    // Fall back to rule-based insights
+    const insights = full.insights || [];
+    const text = insights.length
+      ? insights.slice(0,3).map(i=>`• ${{esc(i)}}`).join('<br>')
+      : 'No transactions in this period.';
+    document.getElementById('anNarrative').innerHTML =
+      `<div class="ai-banner-label">INSIGHTS (configure AI_PROVIDER for AI narrative)</div><div class="ai-banner-text" style="line-height:1.9">${{text}}</div>`;
+  }}
+
+  // ── Stat cards ────────────────────────────────────────────────────────
+  const h  = full.health_score;
+  const fc = full.spending_forecast;
+  const net = full.net || 0;
+  const gradeColour = h ? (h.grade==='A'?'':h.grade==='B'?'blue':h.grade==='C'?'yellow':'red') : '';
+
+  document.getElementById('anStats').innerHTML = `
+    <div class="sc">
+      <div class="lbl">Health Score</div>
+      <div class="val ${{gradeColour}}">${{h ? h.score+'/100' : '—'}}</div>
+      <div class="sub">${{h ? 'Grade '+h.grade : 'No data'}}</div>
+    </div>
+    <div class="sc">
+      <div class="lbl">Net Cashflow</div>
+      <div class="val ${{net<0?'red':''}}" style="font-size:17px">Ksh ${{fmtCompact(net)}}</div>
+      <div class="sub">${{days}} day period</div>
+    </div>
+    <div class="sc">
+      <div class="lbl">Total Spend</div>
+      <div class="val red" style="font-size:17px">Ksh ${{fmtCompact(full.total_out||0)}}</div>
+      <div class="sub">${{full.transaction_count||0}} transactions</div>
+    </div>
+    <div class="sc">
+      <div class="lbl">Projected Spend</div>
+      <div class="val yellow" style="font-size:17px">Ksh ${{fc ? fmtCompact(fc.projected_spend) : '—'}}</div>
+      <div class="sub">${{fc ? fc.confidence+' confidence' : 'Insufficient data'}}</div>
+    </div>`;
+
+  // ── Categories ────────────────────────────────────────────────────────
+  const cats = full.top_categories || [];
+  if (cats.length) {{
+    const maxTotal = cats[0].total || 1;
+    document.getElementById('anCats').innerHTML = cats.map((c,i) => {{
+      const colours = ['var(--green)','var(--blue)','var(--yellow)','var(--purple)','var(--red)','#fb923c','#2dd4bf','#e879f9'];
+      const col = colours[i % colours.length];
+      return `<div class="cat-row">
+        <div class="cat-top">
+          <span class="cat-name">${{esc(c.category)}}</span>
+          <span class="cat-meta">Ksh ${{fmt(c.total)}} &nbsp;·&nbsp; ${{c.percentage}}% &nbsp;·&nbsp; ${{c.count}} txns</span>
+        </div>
+        <div class="cat-bar-bg">
+          <div class="cat-bar-fill" style="width:${{(c.total/maxTotal*100).toFixed(1)}}%;background:${{col}}"></div>
+        </div>
+      </div>`;
+    }}).join('');
+  }} else {{
+    document.getElementById('anCats').innerHTML = '<div class="empty"><span class="ei">📊</span>No spending data</div>';
+  }}
+
+  // ── Health score detail ───────────────────────────────────────────────
+  if (h) {{
+    const gradeClass = h.grade === 'A' ? '' : h.grade;
+    document.getElementById('anHealth').innerHTML = `
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div class="health-grade ${{gradeClass}}" style="${{gradeClass===''?'color:var(--green)':''}}">${{esc(h.grade)}}</div>
+        <div>
+          <div style="font-size:22px;font-family:var(--mono);font-weight:700;color:var(--green)">${{h.score}}<span style="font-size:13px;color:var(--muted)">/100</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${{esc(h.summary)}}</div>
+        </div>
+      </div>
+      ${{renderHealthBar('Savings Rate', h.savings_rate, '#00ff9d')}}
+      ${{renderHealthBar('Income Stability', h.income_stability, '#00b8ff')}}
+      ${{renderHealthBar('Spend Diversity', h.spend_diversity, '#c084fc')}}
+      <div style="margin-top:10px;font-size:10px;font-family:var(--mono);color:${{h.unusual_activity_count>0?'var(--red)':'var(--muted)'}}">${{h.unusual_activity_count}} anomalies flagged in period</div>`;
+  }} else {{
+    document.getElementById('anHealth').innerHTML = '<div class="empty"><span class="ei">🏥</span>Insufficient data</div>';
+  }}
+
+  // ── Cashflow trend chart ───────────────────────────────────────────────
+  const trend = full.cashflow_trend || [];
+  if (trend.length) {{
+    // Sample every N days to avoid label overcrowding
+    const step = Math.max(1, Math.floor(trend.length / 20));
+    const sampled = trend.filter((_,i) => i % step === 0 || i === trend.length-1);
+    mkChart('cashflowChart', 'line',
+      sampled.map(d => d.date.slice(5)),  // MM-DD
+      [
+        {{label:'Inflow', data:sampled.map(d=>d.inflow), borderColor:'var(--green)', backgroundColor:'rgba(0,255,157,.08)', tension:.3, pointRadius:2, fill:true}},
+        {{label:'Outflow',data:sampled.map(d=>d.outflow),borderColor:'var(--red)',   backgroundColor:'rgba(255,77,109,.05)', tension:.3, pointRadius:2, fill:true}},
+      ],
+      {{...BAR_SCALE, plugins:{{ legend:{{ labels:{{ color:'#4a6b5a',font:{{size:9}},padding:7,boxWidth:9 }} }} }} }}
+    );
+  }}
+
+  // ── Forecast detail ───────────────────────────────────────────────────
+  if (fc) {{
+    const netSign = fc.projected_net >= 0 ? '+' : '';
+    const netCol  = fc.projected_net >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('anForecast').innerHTML = `
+      <div class="forecast-conf ${{esc(fc.confidence)}}">${{esc(fc.confidence.toUpperCase())}} CONFIDENCE</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">PROJECTED SPEND</div>
+        <div style="font-size:20px;font-family:var(--mono);font-weight:700;color:var(--red)">Ksh ${{fmt(fc.projected_spend)}}</div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">PROJECTED INCOME</div>
+        <div style="font-size:20px;font-family:var(--mono);font-weight:700;color:var(--green)">Ksh ${{fmt(fc.projected_income)}}</div>
+      </div>
+      <div style="padding-top:12px;border-top:1px solid var(--border2)">
+        <div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">NET FORECAST</div>
+        <div style="font-size:16px;font-family:var(--mono);font-weight:700;color:${{netCol}}">${{netSign}}Ksh ${{fmt(fc.projected_net)}}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:5px">Based on ${{fc.basis_days}} days of history</div>
+      </div>`;
+  }} else {{
+    document.getElementById('anForecast').innerHTML = '<div class="empty"><span class="ei">🔮</span>Not enough history to forecast</div>';
+  }}
+
+  // ── Counterparties ────────────────────────────────────────────────────
+  const cps = full.counterparty_profiles || [];
+  if (cps.length) {{
+    document.getElementById('anCounterparties').innerHTML = cps.slice(0,8).map(cp => {{
+      const flags = (cp.risk_flags || []).map(f => `<span class="cp-flag">${{esc(f)}}</span>`).join('');
+      return `<div class="cp-row">
+        <div>
+          <div class="cp-name">${{shortText(cp.name, 24)}}</div>
+          <div class="cp-flags">${{flags}}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-top:3px">${{cp.transaction_count}} txns</div>
+        </div>
+        <div class="cp-amounts">
+          ${{cp.total_sent>0 ? `<div class="cp-sent">▼ Ksh ${{fmtCompact(cp.total_sent)}}</div>`:''}}
+          ${{cp.total_received>0 ? `<div class="cp-recv">▲ Ksh ${{fmtCompact(cp.total_received)}}</div>`:''}}
+        </div>
+      </div>`;
+    }}).join('');
+  }} else {{
+    document.getElementById('anCounterparties').innerHTML = '<div class="empty"><span class="ei">👥</span>No counterparty data</div>';
+  }}
+
+  // ── Time of day chart ─────────────────────────────────────────────────
+  const tod = full.time_of_day_breakdown || {{}};
+  if (Object.keys(tod).length) {{
+    mkChart('todChart','bar',Object.keys(tod),[
+      {{data:Object.values(tod),backgroundColor:'rgba(0,184,255,.5)',borderColor:'var(--blue)',borderWidth:1}}
+    ],{{...BAR_SCALE,plugins:{{legend:{{display:false}}}}}});
+  }}
+
+  // ── Day of week chart ─────────────────────────────────────────────────
+  const dow = full.day_of_week_breakdown || {{}};
+  const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const dowOrdered = DAY_ORDER.filter(d => d in dow);
+  if (dowOrdered.length) {{
+    mkChart('dowChart','bar',dowOrdered,[
+      {{data:dowOrdered.map(d=>dow[d]),backgroundColor:'rgba(192,132,252,.5)',borderColor:'var(--purple)',borderWidth:1}}
+    ],{{...BAR_SCALE,plugins:{{legend:{{display:false}}}}}});
+  }}
+
+  // ── AI Spending Coach ─────────────────────────────────────────────────
+  const coach = full.ai_spending_coach || '';
+  const isStubCoach = coach.includes('not configured') || coach.includes('unavailable');
+  if (coach && !isStubCoach) {{
+    document.getElementById('anCoach').innerHTML =
+      `<div class="coach-banner-label">💡 AI SPENDING COACH</div><div class="coach-banner-text">${{esc(coach)}}</div>`;
+  }} else {{
+    const wow = full.week_over_week || {{}};
+    const verdict = wow.verdict || '';
+    const tip = verdict === 'spending_up'
+      ? 'Spending is trending up this week. Review discretionary categories for quick wins.'
+      : verdict === 'spending_down'
+      ? 'Great — spending is trending down this week. Keep it up.'
+      : 'Spending is stable this week. Set AI_PROVIDER to enable personalised coaching.';
+    document.getElementById('anCoach').innerHTML =
+      `<div class="coach-banner-label">💡 SPENDING INSIGHT (configure AI_PROVIDER for personalised coaching)</div><div class="coach-banner-text">${{esc(tip)}}</div>`;
+  }}
+
+  // ── Anomalies ─────────────────────────────────────────────────────────
+  if (anomalies !== null) {{
+    document.getElementById('anAnoCount').textContent = anomalies.length ? `${{anomalies.length}} found` : 'none';
+    if (!anomalies.length) {{
+      document.getElementById('anAnoms').innerHTML = '<div class="empty"><span class="ei">✅</span>No anomalies detected</div>';
+    }} else {{
+      document.getElementById('anAnoms').innerHTML = anomalies.slice(0,10).map(a => {{
+        const sevClass = `sev-${{a.severity||'low'}}`;
+        const sevColour = a.severity==='critical'?'var(--red)':a.severity==='high'?'var(--red)':a.severity==='medium'?'var(--yellow)':'var(--muted)';
+        const aiExpl = a.ai_explanation
+          ? `<div class="anom-ai"><span class="anom-ai-ico">🤖</span><span>${{esc(a.ai_explanation)}}</span></div>`
+          : '';
+        // FIX: use a.rule (correct field name from Anomaly.to_dict())
+        return `<div class="anom ${{sevClass}}">
+          <div class="anom-header">
+            <span class="anom-type">${{esc(a.rule||'anomaly')}}</span>
+            <span class="anom-sev" style="color:${{sevColour}};border:1px solid;border-color:${{sevColour}}20;padding:1px 6px;border-radius:9999px;font-size:9px;font-family:var(--mono)">${{esc(a.severity||'low').toUpperCase()}}</span>
+          </div>
+          <div class="anom-desc">${{esc(a.reason||'')}}</div>
+          ${{aiExpl}}
+          <div class="anom-meta">KES ${{fmt(a.amount)}} &nbsp;·&nbsp; ${{shortText(a.timestamp,19)}}</div>
+        </div>`;
+      }}).join('');
+    }}
   }}
 }}
 
-// ━━━ HEALTH ━━━
+// ── Health bar helper ──
+function renderHealthBar(label, pct, colour) {{
+  return `<div style="margin-bottom:9px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+      <span style="font-size:10px;color:var(--muted)">${{esc(label)}}</span>
+      <span style="font-size:10px;font-family:var(--mono);color:${{colour}}">${{parseFloat(pct).toFixed(1)}}%</span>
+    </div>
+    <div class="health-bar"><div class="health-bar-fill" style="width:${{Math.min(100,pct)}}%;background:${{colour}}"></div></div>
+  </div>`;
+}}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// HEALTH TAB
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function loadHealth() {{
   const [hb,hi] = await Promise.all([api('/monitor/heartbeat?record=0'),api('/health/details')]);
   if (hb) {{
@@ -909,9 +1340,7 @@ async function loadRoutesInventory() {{
     panel.innerHTML = '<div class="empty"><span class="ei">🧭</span>No route data</div>';
     return;
   }}
-  const ordered = routes
-    .slice()
-    .sort((a, b) => String(a.path || '').localeCompare(String(b.path || '')));
+  const ordered = routes.slice().sort((a, b) => String(a.path||'').localeCompare(String(b.path||'')));
   panel.innerHTML = ordered.map(r => {{
     const methods = Array.isArray(r.methods) ? r.methods : ['GET'];
     const methodBadges = methods.map(m =>
@@ -942,31 +1371,171 @@ async function loadHbHistory() {{
   </tr>`).join('');
 }}
 
-// ━━━ LEDGER ━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LEDGER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function loadLedger() {{
-  const [v,e]=await Promise.all([api('/ledger/verify'),api('/ledger/events?limit=50')]);
-  if(v){{
-    const ok=v.valid;
-    document.getElementById('ledgerV').innerHTML=`
-      <div class="lv ${{ok?'ok':'err'}}">
-        <span style="font-size:18px">${{ok?'🔐':'⚠️'}}</span>
-        <div><div style="font-weight:700">${{ok?'CHAIN INTACT':'CHAIN ISSUE'}}</div>
-        <div style="font-size:10px;margin-top:2px;opacity:.8">Events: ${{v.event_count||0}} · Valid: ${{v.valid?'Yes':'No'}} · ${{esc(v.message||'')}}</div></div>
+  // ── Local chain verify ──
+  const v = await api('/ledger/verify');
+  if (v) {{
+    const ok = v.valid;
+    document.getElementById('ledgerV').innerHTML = `
+      <div class="lv ${{ok ? 'ok' : 'err'}}">
+        <span style="font-size:18px">${{ok ? '🔐' : '⚠️'}}</span>
+        <div>
+          <div style="font-weight:700">${{ok ? 'LOCAL CHAIN INTACT' : 'CHAIN ISSUE DETECTED'}}</div>
+          <div style="font-size:10px;margin-top:2px;opacity:.8">
+            Events: ${{v.event_count || 0}} · Valid: ${{v.valid ? 'Yes' : 'No'}} · ${{esc(v.message || '')}}
+          </div>
+        </div>
       </div>`;
   }}
-  const b=document.getElementById('ledgerBody');
-  if(!e||!e.length){{b.innerHTML=`<tr><td colspan="6" class="empty"><span class="ei">🔐</span>No ledger events yet</td></tr>`;return;}}
-  b.innerHTML=e.map(ev=>`<tr>
-    <td class="mn mu">${{esc(ev.seq||ev.id||'—')}}</td>
-    <td><span class="chip cb">${{esc(ev.entity_table||'—')}}</span></td>
-    <td class="mn mu">${{shortText(ev.entity_id,12)}}…</td>
-    <td class="mn mu" style="font-size:9px">${{shortText(ev.event_hash,16)}}…</td>
-    <td class="mn mu" style="font-size:9px">${{shortText(ev.prev_hash,16)}}…</td>
-    <td class="mn mu">${{shortText(ev.created_at,19)}}</td>
+
+  // ── Web3 summary ──
+  const s = await api('/ledger/anchor-summary');
+  if (s) {{
+    const web3On  = s.web3_enabled && s.web3_configured;
+    const badgeClass = web3On ? 'w3-confirmed' : 'w3-disabled';
+    const badgeText  = web3On ? 'LIVE ON POLYGON' : (s.web3_enabled ? 'MISCONFIGURED' : 'LOCAL ONLY');
+    document.getElementById('w3Summary').innerHTML = `
+      <div class="lv ${{web3On ? 'ok' : 'disabled'}}">
+        <span style="font-size:18px">${{web3On ? '⛓' : '🔒'}}</span>
+        <div style="flex:1">
+          <div style="font-weight:700;display:flex;align-items:center;gap:8px">
+            Web3 Ledger Anchoring
+            <span class="w3-badge ${{badgeClass}}">${{badgeText}}</span>
+          </div>
+          <div style="font-size:10px;margin-top:3px;opacity:.8">
+            ${{web3On
+              ? `Contract: ${{esc(s.contract_address || '—')}} · Anchor every ${{s.anchor_every_n}} transactions`
+              : 'Set WEB3_ENABLED=true + WALLET_PRIVATE_KEY + CONTRACT_ADDRESS in .env to publish on-chain'}}
+          </div>
+        </div>
+      </div>
+      <div class="anchor-row">
+        <div class="anchor-stat">
+          <div class="asv">${{s.pending_unanchored || 0}}</div>
+          <div class="asl">Pending Anchor</div>
+        </div>
+        <div class="anchor-stat">
+          <div class="asv" style="color:${{(s.confirmed_anchors||0) > 0 ? 'var(--green)' : 'var(--muted)'}}">${{s.confirmed_anchors || 0}}</div>
+          <div class="asl">On-Chain Confirmed</div>
+        </div>
+        <div class="anchor-stat">
+          <div class="asv" style="color:var(--muted)">${{s.local_only_anchors || 0}}</div>
+          <div class="asl">Local Only</div>
+        </div>
+        <div class="anchor-stat">
+          <div class="asv" style="color:${{(s.failed_anchors||0) > 0 ? 'var(--red)' : 'var(--muted)'}}">${{s.failed_anchors || 0}}</div>
+          <div class="asl">Failed</div>
+        </div>
+      </div>`;
+  }}
+
+  // ── On-chain anchors table ──
+  const anchors = await api('/ledger/anchors?limit=50');
+  const ab = document.getElementById('w3AnchorBody');
+  const ac = document.getElementById('w3AnchorCount');
+  if (anchors && anchors.anchors) {{
+    const rows = anchors.anchors;
+    if (ac) ac.textContent = rows.length + ' records';
+    if (!rows.length) {{
+      ab.innerHTML = `<tr><td colspan="6" class="empty"><span class="ei">⛓</span>No anchors yet — click "Anchor Now" to create the first one</td></tr>`;
+    }} else {{
+      ab.innerHTML = rows.map(a => {{
+        const badgeClass = {{confirmed:'w3-confirmed', web3_disabled:'w3-disabled', pending:'w3-pending', failed:'w3-failed'}}[a.status] || 'w3-disabled';
+        const badgeLabel = {{confirmed:'CONFIRMED', web3_disabled:'LOCAL', pending:'PENDING', failed:'FAILED'}}[a.status] || a.status.toUpperCase();
+        const scanLink = a.polygon_scan_url
+          ? `<a href="${{esc(a.polygon_scan_url)}}" target="_blank" style="color:var(--green);font-family:var(--mono);font-size:10px">↗ View</a>`
+          : `<span style="color:var(--muted);font-size:10px">—</span>`;
+        return `<tr>
+          <td class="root-hash" title="${{esc(a.merkle_root || '')}}">${{shortText(a.merkle_root || '—', 18)}}…</td>
+          <td class="mn mu">${{a.transaction_count || 0}}</td>
+          <td class="mn mu">${{a.block_number ? '#' + a.block_number.toLocaleString() : '—'}}</td>
+          <td><span class="w3-badge ${{badgeClass}}">${{badgeLabel}}</span></td>
+          <td class="mn mu">${{shortText(a.anchored_at || '—', 16)}}</td>
+          <td>${{scanLink}}</td>
+        </tr>`;
+      }}).join('');
+    }}
+  }}
+
+  // ── Local ledger events ──
+  const e = await api('/ledger/events?limit=50');
+  const b = document.getElementById('ledgerBody');
+  if (!e || !e.length) {{
+    b.innerHTML = `<tr><td colspan="6" class="empty"><span class="ei">🔐</span>No ledger events yet</td></tr>`;
+    return;
+  }}
+  b.innerHTML = e.map(ev => `<tr>
+    <td class="mn mu">${{esc(ev.seq || ev.id || '—')}}</td>
+    <td><span class="chip cb">${{esc(ev.entity_table || '—')}}</span></td>
+    <td class="mn mu">${{shortText(ev.entity_id, 12)}}…</td>
+    <td class="mn mu" style="font-size:9px">${{shortText(ev.event_hash, 16)}}…</td>
+    <td class="mn mu" style="font-size:9px">${{shortText(ev.prev_hash, 16)}}…</td>
+    <td class="mn mu">${{shortText(ev.created_at, 19)}}</td>
   </tr>`).join('');
 }}
 
-// ━━━ SMS TESTER ━━━
+async function triggerAnchor(force=false) {{
+  const btn = document.getElementById(force ? 'btnAnchorForce' : 'btnAnchor');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Anchoring…';
+  btn.disabled = true;
+  try {{
+    const r = await fetch('/ledger/anchor', {{
+      method: 'POST',
+      headers: {{...HEADERS, 'Content-Type': 'application/json'}},
+      body: JSON.stringify({{force}}),
+    }});
+    const data = await r.json();
+    if (data.anchored) {{
+      const isOnChain = data.status === 'confirmed';
+      toast(
+        isOnChain
+          ? `⛓ Anchored ${{data.tx_count}} txs to Polygon block #${{data.block_number}}`
+          : `🔒 Merkle root stored locally (${{data.tx_count}} txs)`,
+        isOnChain ? 'var(--green)' : 'var(--yellow)'
+      );
+    }} else {{
+      toast(data.message || 'Nothing to anchor yet', 'var(--yellow)');
+    }}
+  }} catch(err) {{
+    toast('Anchor request failed', 'var(--red)');
+  }} finally {{
+    btn.textContent = orig;
+    btn.disabled = false;
+    await loadLedger();
+  }}
+}}
+
+async function verifyOnchain() {{
+  const el = document.getElementById('w3VerifyResult');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="ld">Checking Polygon…</div>`;
+  try {{
+    const data = await api('/ledger/verify-onchain');
+    if (!data) {{ el.innerHTML = `<div class="lv err"><span>⚠️</span><div>Verify endpoint unavailable</div></div>`; return; }}
+    const ok = data.verified;
+    el.innerHTML = `
+      <div class="lv ${{ok ? 'ok' : 'err'}}">
+        <span style="font-size:18px">${{ok ? '✅' : '❌'}}</span>
+        <div>
+          <div style="font-weight:700">${{ok ? 'ROOT VERIFIED ON POLYGON' : 'NOT FOUND ON-CHAIN'}}</div>
+          <div style="font-size:10px;margin-top:2px;opacity:.8">${{esc(data.message || '')}}</div>
+          ${{ok && data.polygon_scan_url
+            ? `<a href="${{esc(data.polygon_scan_url)}}" target="_blank" style="color:var(--green);font-size:10px;margin-top:4px;display:inline-block">↗ View on Polygonscan</a>`
+            : ''}}
+        </div>
+      </div>`;
+  }} catch(err) {{
+    el.innerHTML = `<div class="lv err"><span>⚠️</span><div>Verification failed: ${{esc(String(err))}}</div></div>`;
+  }}
+}}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SMS TESTER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function buildSamples() {{
   document.getElementById('sampleList').innerHTML=SAMPLES.map((s,i)=>
     `<button class="btn-s bg" style="text-align:left;width:100%" onclick="loadSample(${{i}})">${{esc(s.label)}}</button>`

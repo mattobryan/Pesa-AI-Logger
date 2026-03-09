@@ -29,6 +29,9 @@ ALLOWED_DOTENV_KEYS = {
     # Ollama
     "OLLAMA_BASE_URL",
     "OLLAMA_MODEL",
+    "WEB3_ENABLED",
+    "POLYGON_RPC_URL",
+    "ANCHOR_EVERY_N",    
 }
 
 

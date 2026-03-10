@@ -296,43 +296,61 @@ python main.py serve
 
 ```
 pesa_logger/
-├── __init__.py       # Package metadata
-├── ingestion.py      # Raw-first ingestion workflow
-├── monitoring.py     # Heartbeat + silence alert logic
-├── automation.py     # Backup + scheduled cycle helpers
-├── corpus.py         # Corpus loader and parser validator
-├── parser.py         # Regex-based SMS parsing engine
-├── database.py       # SQLite storage layer
-├── failure_report.py # Failed-message classification + reporting
-├── categorizer.py    # Rule-based categorization + tagging
-├── anomaly.py        # Statistical anomaly detection
-├── reports.py        # CSV / Excel export & financial summaries
-├── analytics.py      # Cashflow trends, insights, top categories
-└── webhook.py        # Flask REST API / webhook server
+├── __init__.py
+├── ai_engine.py
+├── analytics.py
+├── anomaly.py
+├── automation.py
+├── categorizer.py
+├── corpus.py
+├── dashboard.py
+├── database.py
+├── failure_report.py
+├── ingestion.py
+├── monitoring.py
+├── parser.py
+├── reports.py
+├── web3_anchor.py
+├── webhook.py
+└── prompts/
+    ├── __init__.py
+    ├── anomaly_explain.txt
+    ├── category_suggest.txt
+    ├── insights.txt
+    └── spending_coach.txt
+contracts/
+└── PesaAnchor.sol
 tests/
-├── test_parser.py
-├── test_corpus.py
-├── test_database.py
-├── test_corrections.py
-├── test_categorizer.py
 ├── test_anomaly.py
 ├── test_automation.py
-├── test_monitoring.py
-├── test_reports.py
+├── test_categorizer.py
+├── test_corpus.py
+├── test_corrections.py
+├── test_database.py
 ├── test_failure_report.py
+├── test_ingestion.py
+├── test_ledger.py
+├── test_monitoring.py
+├── test_parser.py
+├── test_phone_forwarder.py
+├── test_reports.py
 └── test_webhook.py
 scripts/
 ├── backup_db.py
+├── live_pilot.py
 └── run_scheduler_once.py
 corpus/
 └── mpesa_sms_corpus.jsonl
 phone_module/
-├── script/            # Active phone path (Termux)
-└── app/               # Archived (inactive)
-main.py               # CLI entry point
+├── script/            # Active Termux forwarder
+└── app/               # Archived Android app track
+.github/workflows/ci.yml
+Dockerfile
+docker-compose.yml
+render.yaml
+main.py
 requirements.txt
-docs/IMPLEMENTATION_LOG.md
-dev/README.md
+.env.example
 ```
 
 ---
@@ -341,24 +359,33 @@ dev/README.md
 
 ```bash
 pytest tests/ -v
+
+# CI-equivalent env for the test job
+# (do not set PESA_API_KEY globally in this run)
+set AI_PROVIDER=stub && set PESA_DB_PATH=:memory: && pytest tests/ -v
 ```
+
+Current suite: **154 tests** across **14 test files**.
 
 ---
 
 ## Tech Stack
 
-- Python 3.10+
-- SQLite (via `sqlite3` stdlib)
-- Flask (webhook API)
-- openpyxl (Excel export)
-- pytest (testing)
-- OpenAI API (optional AI narrative)
+- Python 3.11+
+- SQLite (`sqlite3`, WAL mode)
+- Flask
+- openpyxl
+- OpenAI / Anthropic / Ollama (optional providers)
+- pytest + pytest-cov
+- Docker + docker compose
+- GitHub Actions (tests, security audit, Docker build check)
+- Render (deployment target)
 
 ---
 
 ## Version
 
-`v0.3.0`
+`v0.4.1`
 
 ## Tags
 

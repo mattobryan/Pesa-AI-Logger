@@ -319,14 +319,19 @@ def _fetch_unanchored_hashes(
             # Backward compatibility for older database schema names.
             if "no such table" not in str(exc).lower():
                 raise
-            rows = conn.execute(
-                """
-                SELECT event_hash FROM ledger_events
-                ORDER BY id ASC
-                LIMIT ? OFFSET ?
-                """,
-                (limit, total_anchored_rows),
-            ).fetchall()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT event_hash FROM ledger_events
+                    ORDER BY id ASC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (limit, total_anchored_rows),
+                ).fetchall()
+            except sqlite3.OperationalError as legacy_exc:
+                if "no such table" not in str(legacy_exc).lower():
+                    raise
+                rows = []
 
     return [r[0] for r in rows if r[0]]
 

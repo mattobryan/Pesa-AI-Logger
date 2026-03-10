@@ -1,16 +1,80 @@
 services:
   - type: web
     name: pesa-ai-logger
-    runtime: docker
-    plan: free
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py serve --port $PORT
+    healthCheckPath: /health
     envVars:
+      # ── Database ────────────────────────────────────────────────────────────
       - key: PESA_DB_PATH
-        value: /tmp/pesa_logger.db
+        value: /data/pesa_logger.db
+
+      # ── API Security ────────────────────────────────────────────────────────
       - key: PESA_API_KEY
-        generateValue: true
+        generateValue: true        # Render auto-generates a secure random value
+
       - key: SESSION_SECRET
         generateValue: true
+
       - key: SESSION_COOKIE_SECURE
         value: "true"
-    healthCheckPath: /health
-    autoDeploy: true
+
+      # ── AI Provider ─────────────────────────────────────────────────────────
+      # Set to: openai | anthropic | ollama | stub
+      - key: AI_PROVIDER
+        value: stub                # safe default — override in Render dashboard
+
+      - key: AI_MAX_TOKENS
+        value: "512"
+
+      - key: AI_TEMPERATURE
+        value: "0.3"
+
+      - key: AI_TIMEOUT_SECONDS
+        value: "30"
+
+      - key: AI_MAX_RETRIES
+        value: "2"
+
+      # OpenAI (set if AI_PROVIDER=openai)
+      - key: OPENAI_API_KEY
+        sync: false                # prompts for secret in Render dashboard
+
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+
+      # Anthropic (set if AI_PROVIDER=anthropic)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5-20251001
+
+      # Ollama — not practical on Render (local LLM), leave blank
+      - key: OLLAMA_BASE_URL
+        value: ""
+
+      - key: OLLAMA_MODEL
+        value: llama3
+
+      # ── Web3 / Ledger Anchoring ──────────────────────────────────────────────
+      - key: WEB3_ENABLED
+        value: "false"             # flip to true once contract is deployed
+
+      - key: POLYGON_RPC_URL
+        value: https://polygon-rpc.com
+
+      - key: WALLET_PRIVATE_KEY
+        sync: false                # NEVER commit — set only in Render dashboard
+
+      - key: CONTRACT_ADDRESS
+        sync: false                # deployed PesaAnchor contract address
+
+      - key: ANCHOR_EVERY_N
+        value: "10"
+
+    disk:
+      name: pesa-data
+      mountPath: /data
+      sizeGB: 1

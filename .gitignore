@@ -19,6 +19,9 @@ env/
 *.db-journal
 *.db-wal
 *.db-shm
+pesa_logger.db
+pesa_logger.db-shm
+pesa_logger.db-wal
 
 # Export artifacts
 *.csv

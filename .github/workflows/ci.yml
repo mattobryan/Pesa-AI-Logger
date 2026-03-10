@@ -37,14 +37,14 @@ jobs:
           AI_PROVIDER: stub
           PESA_DB_PATH: ":memory:"
         run: |
-          pytest tests/ -v --tb=short --cov=pesa_logger --cov-report=term-missing
+          pytest tests/ -v --tb=short --cov=pesa_logger --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Upload coverage report
         if: matrix.python-version == '3.11'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: .coverage
+          path: coverage.xml
           retention-days: 7
 
   audit:

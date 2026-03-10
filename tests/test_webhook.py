@@ -183,6 +183,86 @@ class TestIngestSms:
         )
         assert resp.status_code == 201
 
+    def test_saved_ingest_triggers_auto_anchor_check(self, client, monkeypatch):
+        calls = {"count": 0, "db_path": None, "force": None, "config_type": None}
+
+        class DummyConfig:
+            pass
+
+        def fake_anchor_pending_transactions(db_path, config, force=False):
+            calls["count"] += 1
+            calls["db_path"] = db_path
+            calls["force"] = force
+            calls["config_type"] = type(config).__name__
+            return {"anchored": False}
+
+        monkeypatch.setattr("pesa_logger.web3_anchor.Web3Config", DummyConfig)
+        monkeypatch.setattr(
+            "pesa_logger.web3_anchor.anchor_pending_transactions",
+            fake_anchor_pending_transactions,
+        )
+
+        resp = client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        assert calls["count"] == 1
+        assert calls["db_path"] == client.application.config["TEST_DB_PATH"]
+        assert calls["force"] is False
+        assert calls["config_type"] == "DummyConfig"
+
+    def test_duplicate_ingest_does_not_retrigger_auto_anchor(self, client, monkeypatch):
+        calls = {"count": 0}
+
+        class DummyConfig:
+            pass
+
+        def fake_anchor_pending_transactions(db_path, config, force=False):
+            calls["count"] += 1
+            return {"anchored": False}
+
+        monkeypatch.setattr("pesa_logger.web3_anchor.Web3Config", DummyConfig)
+        monkeypatch.setattr(
+            "pesa_logger.web3_anchor.anchor_pending_transactions",
+            fake_anchor_pending_transactions,
+        )
+
+        first = client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        second = client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert first.status_code == 201
+        assert second.status_code == 200
+        assert calls["count"] == 1
+
+    def test_saved_ingest_still_succeeds_when_auto_anchor_raises(self, client, monkeypatch):
+        class DummyConfig:
+            pass
+
+        def fake_anchor_pending_transactions(db_path, config, force=False):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("pesa_logger.web3_anchor.Web3Config", DummyConfig)
+        monkeypatch.setattr(
+            "pesa_logger.web3_anchor.anchor_pending_transactions",
+            fake_anchor_pending_transactions,
+        )
+
+        resp = client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+
 
 class TestAuthGuards:
     @pytest.mark.parametrize(
@@ -447,3 +527,44 @@ class TestLedger:
         rows = json.loads(resp.data)
         assert isinstance(rows, list)
         assert len(rows) >= 1
+
+    def test_anchor_route_force_true(self, client):
+        client.post(
+            "/sms",
+            data=json.dumps({"sms": SEND_SMS}),
+            content_type="application/json",
+        )
+        resp = client.post(
+            "/ledger/anchor",
+            data=json.dumps({"force": True}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        payload = json.loads(resp.data)
+        assert "anchored" in payload
+        assert "status" in payload
+        assert payload["status"] in {"confirmed", "web3_disabled", "already_anchored"}
+
+    def test_anchor_summary_route(self, client):
+        resp = client.get("/ledger/anchor-summary")
+        assert resp.status_code == 200
+        payload = json.loads(resp.data)
+        assert "pending_unanchored" in payload
+        assert "anchor_every_n" in payload
+        assert "confirmed_anchors" in payload
+        assert "local_only_anchors" in payload
+        assert "failed_anchors" in payload
+
+    def test_anchor_list_route(self, client):
+        resp = client.get("/ledger/anchors?limit=10")
+        assert resp.status_code == 200
+        payload = json.loads(resp.data)
+        assert "summary" in payload
+        assert "anchors" in payload
+        assert isinstance(payload["anchors"], list)
+
+    def test_verify_onchain_without_confirmed_anchor_returns_404(self, client):
+        resp = client.get("/ledger/verify-onchain")
+        assert resp.status_code == 404
+        payload = json.loads(resp.data)
+        assert payload["verified"] is False

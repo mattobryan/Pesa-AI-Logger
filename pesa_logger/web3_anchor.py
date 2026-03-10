@@ -293,33 +293,40 @@ def _fetch_unanchored_hashes(
     """
     Fetch up to *limit* ledger event hashes that have not yet been anchored.
 
-    Reads from the ledger_events table (the existing hash-chain ledger).
+    Reads from the append-only hash-chain ledger.
+    Prefer `ledger_chain` (current schema), fall back to `ledger_events`
+    for backward compatibility.
     Returns hashes in chronological order.
     """
     _ensure_anchors_table(db_path)
     with _get_conn(db_path) as conn:
-        # Find the highest id already anchored
-        last_anchored = conn.execute(
-            """
-            SELECT MAX(CAST(value AS INTEGER)) as max_id
-            FROM ledger_anchors, json_each(tx_hashes_json)
-            """
-        ).fetchone()
-
         # Simpler approach: count how many hashes are in all confirmed anchors
         total_anchored_rows = conn.execute(
             "SELECT COALESCE(SUM(transaction_count), 0) FROM ledger_anchors "
             "WHERE status IN ('confirmed', 'web3_disabled')"
         ).fetchone()[0]
 
-        rows = conn.execute(
-            """
-            SELECT event_hash FROM ledger_events
-            ORDER BY id ASC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, total_anchored_rows),
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                """
+                SELECT event_hash FROM ledger_chain
+                ORDER BY id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, total_anchored_rows),
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            # Backward compatibility for older database schema names.
+            if "no such table" not in str(exc).lower():
+                raise
+            rows = conn.execute(
+                """
+                SELECT event_hash FROM ledger_events
+                ORDER BY id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, total_anchored_rows),
+            ).fetchall()
 
     return [r[0] for r in rows if r[0]]
 
@@ -328,9 +335,22 @@ def _count_pending_anchor_hashes(db_path: str) -> int:
     """Count ledger hashes not yet anchored."""
     _ensure_anchors_table(db_path)
     with _get_conn(db_path) as conn:
-        total = conn.execute(
-            "SELECT COUNT(*) FROM ledger_events"
-        ).fetchone()[0]
+        try:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM ledger_chain"
+            ).fetchone()[0]
+        except sqlite3.OperationalError as exc:
+            # Backward compatibility for older database schema names.
+            if "no such table" not in str(exc).lower():
+                raise
+            try:
+                total = conn.execute(
+                    "SELECT COUNT(*) FROM ledger_events"
+                ).fetchone()[0]
+            except sqlite3.OperationalError as legacy_exc:
+                if "no such table" not in str(legacy_exc).lower():
+                    raise
+                total = 0
         anchored = conn.execute(
             "SELECT COALESCE(SUM(transaction_count), 0) FROM ledger_anchors "
             "WHERE status IN ('confirmed', 'web3_disabled')"

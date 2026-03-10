@@ -251,6 +251,13 @@ def create_app(
         )
 
         if result["status"] == "saved":
+            # Best-effort auto-anchor check after successful ingest.
+            # The anchoring module decides whether threshold is reached.
+            try:
+                from pesa_logger.web3_anchor import anchor_pending_transactions, Web3Config
+                anchor_pending_transactions(db_path=_db, config=Web3Config())
+            except Exception:  # noqa: BLE001
+                app.logger.exception("Auto-anchor check failed after SMS ingest")
             return jsonify(result), 201
         if result["status"] == "duplicate":
             return jsonify(result), 200

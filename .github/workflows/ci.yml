@@ -35,7 +35,6 @@ jobs:
         env:
           # Use stub AI provider — no real API keys needed in CI
           AI_PROVIDER: stub
-          PESA_API_KEY: ci-test-key
           PESA_DB_PATH: ":memory:"
         run: |
           pytest tests/ -v --tb=short --cov=pesa_logger --cov-report=term-missing

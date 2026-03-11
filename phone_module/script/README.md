@@ -31,7 +31,7 @@ Note: Android app track is archived; this Termux script path is the active phone
    - `python mpesa_forwarder.py --init-config`
 3. Edit `config.json`:
    - Set `endpoint_url` to your backend `/sms` URL.
-   - If backend requires key, set `api_key` to match server `--api-key`.
+   - If backend requires a key, set `api_key` to match `PESA_API_KEY` on the server.
    - Keep required terms as `m-pesa`, `confirmed`, `ksh`.
 
 Verify effective runtime config and paths:
@@ -92,7 +92,8 @@ Only this path is kept in working tree:
 For laptop-only operation, keep the receiver local and avoid network exposure:
 
 ```bash
-python main.py serve --port 5000 --api-key "<secret>"
+copy .env.example .env
+python main.py serve --port 5000
 ```
 
 Receiver binds to `127.0.0.1` only. Use direct local ingestion if the phone cannot reach localhost.

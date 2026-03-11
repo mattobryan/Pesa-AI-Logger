@@ -1,64 +1,71 @@
 # Pesa AI Logger
 
-**MPESA Hybrid AI Logger** — a local-first financial logging and intelligence system for mobile-money-driven environments.
+MPESA Hybrid AI Logger is a local-first financial logging and intelligence
+system for mobile-money workflows.
 
-The system captures M-Pesa SMS notifications, parses them through a Python backend, stores structured records in SQLite, and provides automated analytics, anomaly detection, and reporting.
+It captures M-Pesa SMS notifications from Android, parses them through a Python
+backend, stores structured records in SQLite, runs analytics and anomaly
+detection, and can anchor Merkle roots to Polygon for tamper-evident audit
+trails.
 
 ---
 
 ## Architecture
 
-```
+```text
 Android Phone (Termux SMS Forwarder)
-        ↓
-Forwarded SMS (Webhook / HTTP POST)
-        ↓
+        |
+POST /sms (authenticated webhook)
+        |
 Raw Inbox Persistence (inbox_sms)
-        ↓
-Parser + Canonical Ledger (transactions)
-        ↓
-Python Intelligence Engine (pesa_logger/)
-        ↓
-SQLite Database  (pesa_logger.db)
-        ↓
-Excel / CSV Export  +  Financial Analytics
+        |
+Parser + Canonical Ledger (transactions + ledger_chain)
+        |
+AI Analytics + Categorization + Anomaly Detection
+        |
+SQLite Database (pesa_logger.db)
+        | \
+        |  \-> Merkle Root -> Polygon PoS anchor
+        |
+Web Dashboard + CSV / Excel / Reports
 ```
 
 ---
 
-## Features
+## Feature Matrix
 
 | Feature | Module |
-|---------|--------|
-| Regex-based M-Pesa SMS parser | `pesa_logger/parser.py` |
-| SQLite transaction storage | `pesa_logger/database.py` |
-| Transaction categorization | `pesa_logger/categorizer.py` |
-| Anomaly detection | `pesa_logger/anomaly.py` |
-| Weekly / monthly summaries | `pesa_logger/reports.py` |
-| CSV and Excel export | `pesa_logger/reports.py` |
-| REST webhook / API server | `pesa_logger/webhook.py` |
-| AI-generated insights | `pesa_logger/analytics.py` |
-| Raw-first ingestion orchestration | `pesa_logger/ingestion.py` |
-| Heartbeat and silence alerts | `pesa_logger/monitoring.py` |
-| Backup and scheduler automation | `pesa_logger/automation.py` |
+|---|---|
+| Regex M-Pesa SMS parser | `pesa_logger/parser.py` |
+| SQLite storage and WAL mode | `pesa_logger/database.py` |
+| Raw-first ingestion | `pesa_logger/ingestion.py` |
+| Rule-based and AI categorization | `pesa_logger/categorizer.py` |
+| Statistical and AI anomaly detection | `pesa_logger/anomaly.py` |
+| AI analytics engine | `pesa_logger/ai_engine.py` |
+| Forecasting and health score | `pesa_logger/analytics.py` |
+| Weekly and monthly summaries | `pesa_logger/reports.py` |
+| REST API and dashboard | `pesa_logger/webhook.py` |
+| Heartbeat and silence alerting | `pesa_logger/monitoring.py` |
+| Backup and scheduler helpers | `pesa_logger/automation.py` |
 | Parser corpus validation | `pesa_logger/corpus.py` |
-| Audited transaction corrections | `pesa_logger/database.py` + `/corrections` |
-| Tamper-evident hash-chain ledger | `pesa_logger/database.py` + `/ledger/*` |
-| Failed-message classification reports | `pesa_logger/failure_report.py` + `/inbox/failed/report` |
-| Phone-side pilot forwarder (Termux) | `phone_module/script/` |
+| Failed-message classification | `pesa_logger/failure_report.py` |
+| Web3 Merkle anchoring | `pesa_logger/web3_anchor.py` |
+| Termux phone forwarder | `phone_module/script/` |
 
 ---
 
 ## Supported SMS Types
 
-- **send** — money sent to another person
-- **receive** — money received from another person
-- **paybill** — payment to a paybill number (e.g. KPLC, DSTV)
-- **till** — Lipa na M-Pesa till payment
-- **airtime** — airtime purchase
-- **withdraw** — agent withdrawal
-- **deposit** — agent deposit
-- **reversal** — transaction reversal
+| Type | Description |
+|---|---|
+| `send` | Money sent to another person |
+| `receive` | Money received |
+| `paybill` | Paybill payment |
+| `till` | Lipa na M-Pesa till payment |
+| `airtime` | Airtime purchase |
+| `withdraw` | Agent withdrawal |
+| `deposit` | Agent deposit |
+| `reversal` | Transaction reversal |
 
 ---
 
@@ -70,180 +77,73 @@ Excel / CSV Export  +  Financial Analytics
 pip install -r requirements.txt
 ```
 
-### 2. Parse and store a single SMS
-
-```bash
-python main.py sms "BC47YUI Confirmed. Ksh1,000.00 sent to JOHN DOE 0712345678 on 21/2/26 at 10:30 AM. New M-PESA balance is Ksh5,000.00. Transaction cost, Ksh14.00."
-```
-
-Output:
-```json
-{
-  "transaction_id": "BC47YUI",
-  "type": "send",
-  "amount": 1000.0,
-  "currency": "KES",
-  "counterparty_name": "JOHN DOE",
-  "counterparty_phone": "0712345678",
-  "balance": 5000.0,
-  "transaction_cost": 14.0,
-  "timestamp": "2026-02-21T10:30:00",
-  "category": "Personal Transfer",
-  "tags": ["debit", "has-fee"]
-}
-```
-
-### 3. Start the webhook server
-
-Optional local secret setup (recommended):
+### 2. Configure local environment
 
 ```bash
 copy .env.example .env
 ```
 
-Edit `.env` and set `PESA_API_KEY=...`.
+Edit `.env` and set at minimum:
 
-```bash
-python main.py serve --port 5000 --api-key "your-secret"
+```text
+PESA_API_KEY=your-secret
 ```
 
-Or, when `PESA_API_KEY` is set in `.env`, start without passing the key each time:
+`.env` stays local and is ignored by git.
+
+### 3. Start the server
 
 ```bash
 python main.py serve --port 5000
 ```
 
 The server binds to `127.0.0.1` by default.
-Use `--host 0.0.0.0` when you intentionally need LAN/Tailscale/device access.
 
-Send an SMS via HTTP POST:
+### 4. Send a test SMS
+
 ```bash
-curl -X POST http://localhost:5000/sms \
-     -H "Content-Type: application/json" \
-     -H "X-API-Key: your-secret" \
-     -d '{"sms": "BC47YUI Confirmed. Ksh1,000.00 sent to JOHN DOE ..."}'
+curl -X POST http://localhost:5000/sms ^
+  -H "Content-Type: application/json" ^
+  -H "X-API-Key: your-secret" ^
+  -d "{\"sms\": \"BC47YUI Confirmed. Ksh1,000.00 sent to JOHN DOE 0712345678 on 21/2/26 at 10:30 AM. New M-PESA balance is Ksh5,000.00. Transaction cost, Ksh14.00.\"}"
 ```
 
-### 4. View financial insights
+---
+
+## Docker
 
 ```bash
+docker compose up
+```
+
+Data persists in the named volume `pesa_data`.
+
+---
+
+## CLI Reference
+
+```bash
+python main.py sms "<raw sms text>"
+python main.py serve --port 5000
 python main.py insights --days 30
-```
-
-### 5. Generate monthly summary
-
-```bash
 python main.py summary --period monthly
-```
-
-### 6. Export to CSV
-
-```bash
 python main.py export-csv --output transactions.csv
-```
-
-### 7. Export to Excel
-
-```bash
 python main.py export-excel --output transactions.xlsx
-```
-
-### 8. Detect anomalies
-
-```bash
 python main.py anomalies --days 90
-```
-
-### 9. Run heartbeat monitor
-
-```bash
-python main.py heartbeat --hours 24
-```
-
-### 10. Create DB backup
-
-```bash
-python main.py backup --backup-dir backups --keep-last 14
-```
-
-### 11. Run one scheduler cycle
-
-```bash
-python main.py scheduler-once --backup-dir backups --export-dir exports --hours 24
-```
-
-### 12. Validate parser corpus
-
-```bash
-python main.py validate-corpus --path corpus/mpesa_sms_corpus.jsonl --min-success 0.98
-```
-
-### 13. Apply audited correction
-
-```bash
-python main.py correct --transaction-id BC47YUI --set category=Utilities --reason "manual correction" --by admin
-```
-
-### 14. Run phone pilot forwarder (Termux)
-
-See:
-
-```bash
-phone_module/script/README.md
-```
-
-### 15. List raw inbox SMS (oldest first)
-
-```bash
-python main.py list-inbox --oldest-first --limit 500
-```
-
-List only failed parse rows:
-
-```bash
-python main.py list-inbox --parse-status failed --limit 200
-```
-
-Reparse failed rows after parser updates:
-
-```bash
-python main.py reparse-failed --limit 200
-```
-
-Classify failed rows into receipt families (Fuliza, airtime, merchant acknowledgements, unknown):
-
-```bash
-python main.py failed-report --limit 5000 --sample-size 3
-```
-
-Filter inbox rows by SIM slot:
-
-```bash
-python main.py list-inbox --sim-slot 1 --limit 200
-```
-
-List canonical transactions filtered by SIM slot:
-
-```bash
-python main.py list-transactions --sim-slot 2 --limit 200
-```
-
-### 16. Verify tamper-evident ledger chain
-
-```bash
 python main.py verify-ledger
 python main.py ledger-events --limit 20
-```
-
-If the chain is empty but your DB already has historical records, run one-time backfill:
-
-```bash
 python main.py rebuild-ledger
-```
-
-### 17. Run local live pilot (HTTP ingest smoke test)
-
-```bash
+python main.py list-inbox --oldest-first --limit 500
+python main.py list-inbox --parse-status failed --limit 200
+python main.py list-transactions --sim-slot 2 --limit 200
+python main.py reparse-failed --limit 200
+python main.py failed-report --limit 5000 --sample-size 3
+python main.py correct --transaction-id BC47YUI --set category=Utilities --reason "manual fix" --by admin
+python main.py list-corrections --transaction-id BC47YUI
+python main.py heartbeat --hours 24
+python main.py backup --backup-dir backups --keep-last 14
+python main.py scheduler-once --backup-dir backups --export-dir exports --hours 24
+python main.py validate-corpus --path corpus/mpesa_sms_corpus.jsonl --min-success 0.98
 python scripts/live_pilot.py
 ```
 
@@ -251,107 +151,95 @@ python scripts/live_pilot.py
 
 ## API Endpoints
 
-When `PESA_API_KEY` is configured, all data/analytics/ledger/export routes require either:
-- `X-API-Key` header, or
-- an authenticated dashboard session.
+When `PESA_API_KEY` is set, data and analytics routes require either an
+`X-API-Key` header or an authenticated dashboard session.
+
+### Core
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `GET` | `/dashboard` | Dashboard login/app shell (session-based) |
-| `POST` | `/auth` | Dashboard login (API key -> session) |
-| `GET` | `/logout` | Dashboard logout (clears session) |
-| `GET` | `/health/details` | Detailed health diagnostics (auth) |
-| `GET` | `/routes` | Live route inventory for dashboard/API clients (auth) |
-| `POST` | `/sms` | Ingest a raw M-Pesa SMS (requires `X-API-Key` when configured) |
-| `GET` | `/transactions` | List stored transactions (`type`, `category`, `sim_slot`, `limit`) |
-| `GET` | `/analytics/insights` | AI-generated insights |
+|---|---|---|
+| `GET` | `/health` | Public health check |
+| `GET` | `/dashboard` | Dashboard shell |
+| `POST` | `/auth` | Dashboard login |
+| `GET` | `/logout` | Dashboard logout |
+| `GET` | `/health/details` | Detailed diagnostics |
+| `GET` | `/routes` | Live route inventory |
+| `POST` | `/sms` | Ingest a raw M-Pesa SMS |
+
+### Data and Analytics
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/transactions` | List stored transactions |
+| `GET` | `/inbox` | List raw inbox rows |
+| `GET` | `/inbox/failed/report` | Failed-message classification |
+| `GET` | `/analytics/insights` | Narrative insights |
 | `GET` | `/analytics/summary/weekly` | Weekly summary |
 | `GET` | `/analytics/summary/monthly` | Monthly summary |
 | `GET` | `/analytics/anomalies` | Detected anomalies |
-| `GET` | `/export/csv` | Download CSV export |
-| `GET` | `/monitor/heartbeat` | Heartbeat and silence status |
-| `GET` | `/monitor/heartbeat/history` | Heartbeat telemetry history |
+| `GET` | `/export/csv` | CSV export |
+| `GET` | `/monitor/heartbeat` | Heartbeat status |
+| `GET` | `/monitor/heartbeat/history` | Heartbeat history |
 | `POST` | `/corrections` | Apply audited correction |
-| `GET` | `/corrections` | List correction audit history |
-| `GET` | `/inbox` | List raw stored SMS rows (`parse_status`, `sim_slot`, `limit`) |
-| `GET` | `/inbox/failed/report` | Classify and summarize failed parse rows |
-| `GET` | `/ledger/verify` | Verify hash-chain integrity |
-| `GET` | `/ledger/events` | List hash-chain ledger events |
+| `GET` | `/corrections` | List correction history |
+
+### Ledger and Web3
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/ledger/verify` | Verify local hash-chain integrity |
+| `GET` | `/ledger/events` | List ledger events |
+| `POST` | `/ledger/anchor` | Trigger Merkle anchor |
+| `GET` | `/ledger/anchors` | List anchor records |
+| `GET` | `/ledger/verify-onchain` | Verify root on-chain |
+| `GET` | `/ledger/anchor-summary` | Anchor summary for dashboard |
 
 ---
 
-## Optional AI Narrative (OpenAI)
+## AI Providers
 
-Set `OPENAI_API_KEY` in your environment to enable LLM-generated narrative summaries in the insights endpoint.
+Set `AI_PROVIDER` in `.env` to one of:
 
-```bash
-export OPENAI_API_KEY=sk-...
-python main.py serve
-```
+| Value | Description |
+|---|---|
+| `stub` | Offline mode, safe for tests and CI |
+| `openai` | OpenAI API |
+| `anthropic` | Anthropic API |
+| `ollama` | Local Ollama server |
 
 ---
 
-## Project Structure
+## Web3 Anchoring
 
+Anchoring is disabled by default. When enabled, the app computes a SHA-256
+Merkle root from pending ledger hashes and stores or publishes that root to the
+`PesaAnchor` contract.
+
+Example `.env` settings:
+
+```text
+WEB3_ENABLED=true
+POLYGON_RPC_URL=https://polygon-rpc.com
+WALLET_PRIVATE_KEY=0x...
+CONTRACT_ADDRESS=0x...
+ANCHOR_EVERY_N=10
 ```
-pesa_logger/
-├── __init__.py
-├── ai_engine.py
-├── analytics.py
-├── anomaly.py
-├── automation.py
-├── categorizer.py
-├── corpus.py
-├── dashboard.py
-├── database.py
-├── failure_report.py
-├── ingestion.py
-├── monitoring.py
-├── parser.py
-├── reports.py
-├── web3_anchor.py
-├── webhook.py
-└── prompts/
-    ├── __init__.py
-    ├── anomaly_explain.txt
-    ├── category_suggest.txt
-    ├── insights.txt
-    └── spending_coach.txt
-contracts/
-└── PesaAnchor.sol
-tests/
-├── test_anomaly.py
-├── test_automation.py
-├── test_categorizer.py
-├── test_corpus.py
-├── test_corrections.py
-├── test_database.py
-├── test_failure_report.py
-├── test_ingestion.py
-├── test_ledger.py
-├── test_monitoring.py
-├── test_parser.py
-├── test_phone_forwarder.py
-├── test_reports.py
-└── test_webhook.py
-scripts/
-├── backup_db.py
-├── live_pilot.py
-└── run_scheduler_once.py
-corpus/
-└── mpesa_sms_corpus.jsonl
-phone_module/
-├── script/            # Active Termux forwarder
-└── app/               # Archived Android app track
-.github/workflows/ci.yml
-Dockerfile
-docker-compose.yml
-render.yaml
-main.py
-requirements.txt
-.env.example
-```
+
+`POLYGON_RPC_URL` may point to mainnet or Amoy. The code now derives the chain
+ID and explorer URL from the RPC host.
+
+---
+
+## Deployment
+
+The repo includes:
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Multi-stage runtime image |
+| `docker-compose.yml` | Local container run with persistence |
+| `render.yaml` | Render deployment manifest |
+| `.github/workflows/ci.yml` | Test, audit, and Docker CI |
 
 ---
 
@@ -360,33 +248,90 @@ requirements.txt
 ```bash
 pytest tests/ -v
 
-# CI-equivalent env for the test job
-# (do not set PESA_API_KEY globally in this run)
 set AI_PROVIDER=stub && set PESA_DB_PATH=:memory: && pytest tests/ -v
 ```
 
-Current suite: **154 tests** across **14 test files**.
+Current suite: **204 tests** across **16 test files**.
+
+---
+
+## Project Structure
+
+```text
+pesa_logger/
+|-- __init__.py
+|-- ai_engine.py
+|-- analytics.py
+|-- anomaly.py
+|-- automation.py
+|-- categorizer.py
+|-- corpus.py
+|-- dashboard.py
+|-- database.py
+|-- failure_report.py
+|-- ingestion.py
+|-- monitoring.py
+|-- parser.py
+|-- reports.py
+|-- web3_anchor.py
+|-- webhook.py
+`-- prompts/
+    |-- __init__.py
+    |-- anomaly_explain.txt
+    |-- category_suggest.txt
+    |-- insights.txt
+    `-- spending_coach.txt
+contracts/
+`-- PesaAnchor.sol
+tests/
+|-- test_anomaly.py
+|-- test_automation.py
+|-- test_categorizer.py
+|-- test_corpus.py
+|-- test_corrections.py
+|-- test_database.py
+|-- test_failure_report.py
+|-- test_ingestion.py
+|-- test_ledger.py
+|-- test_monitoring.py
+|-- test_parser.py
+|-- test_phone_forwarder.py
+|-- test_reports.py
+|-- test_web3_anchor.py
+|-- test_webhook.py
+`-- test_webhook_ledger.py
+scripts/
+|-- backup_db.py
+|-- live_pilot.py
+`-- run_scheduler_once.py
+phone_module/
+|-- script/
+`-- app/
+.github/workflows/ci.yml
+Dockerfile
+docker-compose.yml
+render.yaml
+requirements.txt
+.env.example
+main.py
+```
 
 ---
 
 ## Tech Stack
 
 - Python 3.11+
-- SQLite (`sqlite3`, WAL mode)
+- SQLite with WAL mode
 - Flask
+- OpenAI / Anthropic / Ollama
 - openpyxl
-- OpenAI / Anthropic / Ollama (optional providers)
-- pytest + pytest-cov
-- Docker + docker compose
-- GitHub Actions (tests, security audit, Docker build check)
-- Render (deployment target)
+- pytest and pytest-cov
+- Docker and Docker Compose
+- GitHub Actions
+- Render
 
 ---
 
 ## Version
 
-`v0.4.1`
-
-## Tags
-
-`python` · `fintech` · `mpesa` · `sms-parser` · `automation` · `personal-finance` · `sqlite` · `data-logging` · `ai-agent` · `kenya-tech`
+`v1.0.0`

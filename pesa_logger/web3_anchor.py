@@ -316,7 +316,6 @@ def _fetch_unanchored_hashes(
                 (limit, total_anchored_rows),
             ).fetchall()
         except sqlite3.OperationalError as exc:
-            # Backward compatibility for older database schema names.
             if "no such table" not in str(exc).lower():
                 raise
             try:
@@ -345,7 +344,6 @@ def _count_pending_anchor_hashes(db_path: str) -> int:
                 "SELECT COUNT(*) FROM ledger_chain"
             ).fetchone()[0]
         except sqlite3.OperationalError as exc:
-            # Backward compatibility for older database schema names.
             if "no such table" not in str(exc).lower():
                 raise
             try:
@@ -366,8 +364,15 @@ def _count_pending_anchor_hashes(db_path: str) -> int:
 # ─── On-chain anchoring ───────────────────────────────────────────────────────
 
 
-def _build_polygon_scan_url(tx_hash: str, mainnet: bool = True) -> str:
-    base = "https://polygonscan.com/tx" if mainnet else "https://mumbai.polygonscan.com/tx"
+def _build_polygon_scan_url(tx_hash: str, rpc_url: str = "") -> str:
+    """Build a Polygonscan explorer URL.
+
+    Detects Amoy testnet from the RPC URL; defaults to mainnet explorer.
+    """
+    if "amoy" in rpc_url.lower():
+        base = "https://amoy.polygonscan.com/tx"
+    else:
+        base = "https://polygonscan.com/tx"
     return f"{base}/{tx_hash}"
 
 
@@ -428,7 +433,7 @@ def _anchor_to_polygon(
         "nonce": nonce,
         "gas": 80_000,
         "gasPrice": gas_price,
-        "chainId": 137,  # Polygon mainnet
+        "chainId": 80002 if "amoy" in config.polygon_rpc_url.lower() else 137,
     })
 
     signed = account.sign_transaction(txn)
@@ -543,7 +548,7 @@ def anchor_pending_transactions(
     # Submit to Polygon
     try:
         tx_hash, block_number = _anchor_to_polygon(merkle_root, config)
-        scan_url = _build_polygon_scan_url(tx_hash)
+        scan_url = _build_polygon_scan_url(tx_hash, rpc_url=config.polygon_rpc_url)
 
         _update_anchor_status(
             db_path=db_path,
@@ -650,7 +655,11 @@ def verify_onchain(
                 "verified": True,
                 "merkle_root": merkle_root,
                 "block_number": block_number,
-                "polygon_scan_url": f"https://polygonscan.com/block/{block_number}",
+                "polygon_scan_url": (
+                    f"https://amoy.polygonscan.com/block/{block_number}"
+                    if "amoy" in config.polygon_rpc_url.lower()
+                    else f"https://polygonscan.com/block/{block_number}"
+                ),
                 "message": f"Root verified on-chain at Polygon block {block_number}.",
             }
         else:

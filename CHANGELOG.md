@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-11
+
+Initial stable release of Pesa AI Logger. This release consolidates the
+local-first SMS ingestion pipeline, dashboard/API surface, ledger verification,
+failed-message reporting, and Web3 anchor coverage into a production release.
+
 ### Added
 - Raw-first ingestion orchestration in `pesa_logger/ingestion.py`.
 - `inbox_sms` immutable capture table with normalized hash dedupe.
